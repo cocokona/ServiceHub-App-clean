@@ -161,6 +161,139 @@ export async function fetchTechnicians(
 }
 
 // ---------------------------------------------------------------------------
+// Order In Progress
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a new order in the order_in_progress table.
+ * Returns the created order mapped to the app's Job type.
+ */
+export async function createOrderInProgress(
+  order: Partial<Job> & {
+    customerId: string;
+    serviceType: string;
+    serviceCategory: string;
+  }
+): Promise<Job | null> {
+  const { data, error } = await supabase
+    .from('order_in_progress')
+    .insert({
+      customer_id: order.customerId,
+      service_type: order.serviceType,
+      service_category: order.serviceCategory,
+      customer_name: order.customerName,
+      customer_phone: order.customerPhone,
+      customer_avatar: order.customerAvatar,
+      address: order.address,
+      apartment: order.apartment,
+      city: order.city,
+      zip_code: order.zipCode,
+      scheduled_date: order.date,
+      time_slot: order.timeSlot,
+      rooms: order.rooms,
+      duration: order.duration,
+      focus_areas: order.focusAreas || [],
+      notes: order.notes,
+      base_rate: order.baseRate || 0,
+      tax: order.tax || 0,
+      travel_fee: order.travelFee || 0,
+      add_ons_price: order.addOnsPrice || 0,
+      total_price: order.totalPrice || 0,
+      technician_name: order.technicianName,
+      technician_avatar: order.technicianAvatar,
+    })
+    .select('*')
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data ? mapDbOrderToAppJob(data) : null;
+}
+
+/**
+ * Fetch all pending orders in progress for a customer.
+ */
+export async function fetchOrdersInProgress(customerId: string): Promise<Job[]> {
+  const { data, error } = await supabase
+    .from('order_in_progress')
+    .select('*')
+    .eq('customer_id', customerId)
+    .order('created_at', { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data || []).map(mapDbOrderToAppJob);
+}
+
+/**
+ * Fetch all pending orders in progress visible to technicians.
+ * Optionally filter by service category.
+ */
+export async function fetchAllOrdersInProgress(category?: string): Promise<Job[]> {
+  let query = supabase
+    .from('order_in_progress')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (category && category !== 'all') {
+    query = query.eq('service_category', category);
+  }
+
+  const { data, error } = await query;
+
+  if (error) throw new Error(error.message);
+  return (data || []).map(mapDbOrderToAppJob);
+}
+
+/**
+ * Technician accepts an order_in_progress.
+ * Calls the DB function which moves the row to jobs and deletes from order_in_progress.
+ * Returns the new job ID.
+ */
+export async function acceptOrderInProgress(
+  orderId: string,
+  technicianId: string
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc('accept_order_in_progress', {
+    p_order_id: orderId,
+    p_technician_id: technicianId,
+  });
+
+  if (error) throw new Error(error.message);
+  return data as string | null;
+}
+
+function mapDbOrderToAppJob(row: any): Job {
+  return {
+    id: row.id,
+    jobCode: row.job_code || undefined,
+    serviceType: row.service_type,
+    serviceCategory: row.service_category,
+    customerName: row.customer_name || '',
+    customerPhone: row.customer_phone || '',
+    customerAvatar: row.customer_avatar || '',
+    address: row.address || '',
+    apartment: row.apartment || '',
+    city: row.city || '',
+    zipCode: row.zip_code || '',
+    date: row.scheduled_date || '',
+    timeSlot: row.time_slot || 'morning',
+    rooms: row.rooms || '',
+    duration: row.duration || 2,
+    focusAreas: row.focus_areas || [],
+    notes: row.notes || '',
+    status: 'pending',
+    baseRate: Number(row.base_rate) || 0,
+    tax: Number(row.tax) || 0,
+    travelFee: Number(row.travel_fee) || 0,
+    addOnsPrice: Number(row.add_ons_price) || 0,
+    totalPrice: Number(row.total_price) || 0,
+    elapsedTime: 0,
+    checklist: [],
+    technicianName: row.technician_name,
+    technicianAvatar: row.technician_avatar,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Messages
 // ---------------------------------------------------------------------------
 
@@ -225,6 +358,61 @@ export function subscribeToMessages(
   return () => {
     supabase.removeChannel(channel);
   };
+}
+
+// ---------------------------------------------------------------------------
+// Technician Availability
+// ---------------------------------------------------------------------------
+
+export interface AvailabilitySlot {
+  dayOfWeek: number;
+  timeSlot: string;
+  isAvailable: boolean;
+}
+
+/**
+ * Fetch availability for a technician. Returns a map keyed by "dayOfWeek-timeSlot".
+ */
+export async function fetchTechnicianAvailability(
+  technicianId: string
+): Promise<Record<string, boolean>> {
+  const { data, error } = await supabase
+    .from('technician_availability')
+    .select('day_of_week, time_slot, is_available')
+    .eq('technician_id', technicianId);
+
+  if (error) throw new Error(error.message);
+
+  const map: Record<string, boolean> = {};
+  (data || []).forEach((row: any) => {
+    map[`${row.day_of_week}-${row.time_slot}`] = row.is_available;
+  });
+  return map;
+}
+
+/**
+ * Upsert availability for a single slot.
+ * If the row exists, update is_available. Otherwise, insert a new row.
+ */
+export async function setTechnicianAvailability(
+  technicianId: string,
+  dayOfWeek: number,
+  timeSlot: string,
+  isAvailable: boolean
+): Promise<void> {
+  const { error } = await supabase
+    .from('technician_availability')
+    .upsert(
+      {
+        technician_id: technicianId,
+        day_of_week: dayOfWeek,
+        time_slot: timeSlot,
+        is_available: isAvailable,
+      },
+      { onConflict: 'technician_id,day_of_week,time_slot' }
+    );
+
+  if (error) throw new Error(error.message);
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +491,8 @@ export async function createReview(
 
 function mapDbJobToAppJob(row: any): Job {
   return {
-    id: row.job_code || row.id,
+    id: row.id,
+    jobCode: row.job_code || undefined,
     serviceType: row.service_type,
     serviceCategory: row.service_category,
     customerName: row.customer_name || '',

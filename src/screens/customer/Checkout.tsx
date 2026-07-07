@@ -10,24 +10,25 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AppContext } from '../../navigation/AppNavigator';
 import { Job } from '../../types';
-import { paymentMethods, defaultChecklist, defaultTravelFee, jobIdPrefix } from '../../data';
+import { paymentMethods, defaultChecklist, defaultTravelFee } from '../../data';
 import { PINK, PINK_SOFT, INK, MUTED, SUCCESS, SUCCESS_SOFT, CANVAS } from '../../theme/colors';
+import { createOrderInProgress } from '../../services/database.service';
 
 export default function Checkout({ route, navigation }: any) {
   const { bookingData } = route.params || {};
-  const { setJobs, refreshJobs } = useContext(AppContext);
+  const { user, setJobs, refreshJobs } = useContext(AppContext);
   const [paymentMethod, setPaymentMethod] = useState('credit_card');
   const [paying, setPaying] = useState(false);
 
   const handlePay = async () => {
     setPaying(true);
     try {
-      const newJob: Job = {
-        id: `${jobIdPrefix}-${Math.floor(1000 + Math.random() * 9000)}`,
+      const newJob = await createOrderInProgress({
+        customerId: user?.id || '',
         serviceType: bookingData?.serviceType || 'Service',
         serviceCategory: bookingData?.serviceCategory || 'cleaning',
-        customerName: 'Customer',
-        customerPhone: '(555) 019-9800',
+        customerName: user?.name || '',
+        customerPhone: user?.phone || '',
         customerAvatar: '',
         address: bookingData?.address || '',
         apartment: bookingData?.apartment || '',
@@ -39,26 +40,19 @@ export default function Checkout({ route, navigation }: any) {
         duration: bookingData?.duration || 2,
         focusAreas: bookingData?.focusAreas || [],
         notes: bookingData?.notes || '',
-        status: 'on_the_way',
         baseRate: bookingData?.baseRate || 0,
         tax: 0,
         travelFee: defaultTravelFee,
         addOnsPrice: bookingData?.addOnsPrice || 0,
         totalPrice: bookingData?.totalPrice || 0,
-        elapsedTime: 0,
-        checklist: defaultChecklist.map((item) => ({ ...item })),
         technicianName: bookingData?.technicianName,
         technicianAvatar: bookingData?.technicianAvatar,
-      };
+      });
 
-      await fetch('/api/jobs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newJob),
-      }).catch(() => {});
-
-      setJobs((prev: Job[]) => [newJob, ...prev]);
-      navigation.navigate('Tracking', { job: newJob });
+      if (newJob) {
+        setJobs((prev: Job[]) => [newJob, ...prev]);
+        navigation.navigate('Tracking', { job: newJob });
+      }
     } catch (err) {
       console.error(err);
     } finally {

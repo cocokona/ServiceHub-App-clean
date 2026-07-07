@@ -23,6 +23,7 @@ export {
   focusAreas,
   baseRatesByRoom,
   serviceTypeMap,
+  categoryConfig,
   timeSlots,
   defaultTravelFee,
   defaultTax,
@@ -91,4 +92,5 @@ export type {
   ReviewTag,
   SupportPattern,
   Notification,
+  CategoryFieldConfig,
 } from './loader';

@@ -198,6 +198,22 @@ export const serviceTypeMap: Record<string, string> = safeGet<
   Record<string, string>
 >(serviceConfigData.serviceTypeMap, {});
 
+export interface CategoryFieldConfig {
+  title: string;
+  subtitle: string;
+  fieldLabel: string;
+  fieldOptions: string[];
+  focusAreas: FocusArea[];
+  baseRatesByField: Record<string, number>;
+  bannerTitle: string;
+  bannerSubtitle: string;
+  bannerIcon: string;
+}
+
+export const categoryConfig: Record<string, CategoryFieldConfig> = safeGet<
+  Record<string, CategoryFieldConfig>
+>(serviceConfigData.categoryConfig, {});
+
 export const timeSlots: TimeSlot[] = safeArray<TimeSlot>(
   serviceConfigData.timeSlots,
   [],

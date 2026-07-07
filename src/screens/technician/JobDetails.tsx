@@ -40,7 +40,7 @@ export default function JobDetails({ route, navigation }: any) {
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
             <View>
               <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A' }}>{job.serviceType}</Text>
-              <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{job.id} - {job.rooms}</Text>
+              <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{job.jobCode || job.id} - {job.rooms}</Text>
             </View>
             <View style={{ backgroundColor: '#FFE2EC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
               <Text style={{ fontSize: 14, fontWeight: '800', color: '#FF4F8B' }}>${estimatedEarnings}</Text>

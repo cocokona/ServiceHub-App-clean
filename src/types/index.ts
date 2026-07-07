@@ -17,6 +17,7 @@ export type TechnicianScreen =
 
 export interface Job {
   id: string;
+  jobCode?: string;
   serviceType: string;
   serviceCategory: 'cleaning' | 'repair' | 'beauty' | 'electrical';
   customerName: string;
@@ -79,4 +80,7 @@ export interface User {
   bio?: string;
   phone?: string;
   hourlyRate?: number;
+  address?: string;
+  rating?: number;
+  reviewsCount?: number;
 }

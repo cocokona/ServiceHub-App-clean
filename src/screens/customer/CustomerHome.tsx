@@ -8,20 +8,23 @@ import {
   Modal,
   FlatList,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { AppContext } from '../../navigation/AppNavigator';
-import { getImageUrl, categories, recommendedTechnicians, mockNotifications, cities, defaultLocation, getStatusColor } from '../../data';
+import { getImageUrl, categories, recommendedTechnicians, mockNotifications, cities, defaultLocation, getStatusColor, categoryConfig } from '../../data';
 import { PINK, PINK_SOFT, INK, MUTED, ACCENT, ACCENT_SOFT, CANVAS } from '../../theme/colors';
 import { Technician, Job } from '../../types';
 import { apiGet } from '../../api/client';
+import { updateProfile } from '../../services/auth.service';
+import { fetchTechnicians } from '../../services/database.service';
 
 // Delight Experience palette — imported from theme/colors
 
 export default memo(function CustomerHome({ route, navigation }: any) {
-  const { user, jobs, logout, refreshJobs } = useContext(AppContext);
+  const { user, setUser, jobs, logout, refreshJobs } = useContext(AppContext);
   const activeTab = route?.params?.tab || 'home';
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -32,22 +35,13 @@ export default memo(function CustomerHome({ route, navigation }: any) {
   const [notifications] = useState(mockNotifications);
   const [showNotifications, setShowNotifications] = useState(false);
   const [profileName, setProfileName] = useState(user?.name || '');
-  const [profilePhone, setProfilePhone] = useState(user?.phone || '(555) 019-9800');
-  const [profileAddress, setProfileAddress] = useState('123 Main St');
+  const [profilePhone, setProfilePhone] = useState(user?.phone || '');
+  const [profileAddress, setProfileAddress] = useState(user?.address || '');
   const [editingProfile, setEditingProfile] = useState(false);
 
   useEffect(() => {
-    apiGet('/api/technicians').then((data) => {
-      if (Array.isArray(data)) {
-        setTechnicians(data.map((t: any) => ({
-          name: t.name,
-          avatar: t.avatar || '',
-          rating: t.rating || 0,
-          reviewsCount: t.reviewsCount || 0,
-          specialty: t.specialty || t.workCategory,
-          ratePerHour: t.ratePerHour || 45,
-        })));
-      }
+    fetchTechnicians().then((data) => {
+      setTechnicians(data);
     }).catch(() => {});
   }, []);
 
@@ -91,7 +85,19 @@ export default memo(function CustomerHome({ route, navigation }: any) {
               <TextInput value={profileName} onChangeText={setProfileName} style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} />
               <TextInput value={profilePhone} onChangeText={setProfilePhone} style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} />
               <TextInput value={profileAddress} onChangeText={setProfileAddress} style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} />
-              <TouchableOpacity onPress={() => setEditingProfile(false)} style={{ backgroundColor: '#FF4F8B', padding: 12, borderRadius: 12, alignItems: 'center' }}>
+              <TouchableOpacity onPress={async () => {
+                const result = await updateProfile({
+                  name: profileName || undefined,
+                  phone: profilePhone || undefined,
+                  address: profileAddress || undefined,
+                });
+                if (result.error) {
+                  Alert.alert('Error', result.error);
+                } else {
+                  setUser(result.user);
+                  setEditingProfile(false);
+                }
+              }} style={{ backgroundColor: '#FF4F8B', padding: 12, borderRadius: 12, alignItems: 'center' }}>
                 <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>Save</Text>
               </TouchableOpacity>
             </View>
@@ -103,11 +109,11 @@ export default memo(function CustomerHome({ route, navigation }: any) {
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Ionicons name="call-outline" size={16} color="#64748B" />
-                <Text style={{ fontSize: 13, color: '#0F172A' }}>{profilePhone}</Text>
+                <Text style={{ fontSize: 13, color: '#64748B' }}>{profilePhone || 'No phone set'}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Ionicons name="location-outline" size={16} color="#64748B" />
-                <Text style={{ fontSize: 13, color: '#0F172A' }}>{profileAddress}</Text>
+                <Text style={{ fontSize: 13, color: '#64748B' }}>{profileAddress || 'No address set'}</Text>
               </View>
               <TouchableOpacity onPress={() => setEditingProfile(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                 <Ionicons name="create-outline" size={14} color="#FF4F8B" />
@@ -272,7 +278,7 @@ export default memo(function CustomerHome({ route, navigation }: any) {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                   <View>
                     <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>{job.serviceType}</Text>
-                    <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{job.id}</Text>
+                    <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>{job.jobCode || job.id}</Text>
                   </View>
                   <View style={{ backgroundColor: getStatusColorFn(job.status) + '20', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
                     <Text style={{ fontSize: 10, fontWeight: '700', color: getStatusColorFn(job.status) }}>
@@ -342,16 +348,32 @@ export default memo(function CustomerHome({ route, navigation }: any) {
         </TouchableOpacity>
       )}
 
-      {/* Hero Banner */}
-      <View style={{ marginHorizontal: 20, marginBottom: 20, borderRadius: 16, overflow: 'hidden' }}>
-        <Image source={{ uri: getImageUrl('heroBanner') }} style={{ width: '100%', height: 180 }} resizeMode="cover" />
-        <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: 16, backgroundColor: 'rgba(0,0,0,0.4)' }}>
-          <Text style={{ color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4 }}>Expert Home Services</Text>
-          <Text style={{ color: '#fff', fontSize: 12, opacity: 0.9, marginBottom: 8 }}>Book trusted professionals today</Text>
-          <TouchableOpacity style={{ backgroundColor: '#fff', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8, alignSelf: 'flex-start' }}>
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#FF4F8B' }}>Book Now</Text>
-          </TouchableOpacity>
-        </View>
+      {/* Category Promotional Banners */}
+      <View style={{ marginBottom: 20 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}>
+          {categories.map((cat) => {
+            const cfg = categoryConfig[cat.key];
+            return (
+              <TouchableOpacity
+                key={cat.key}
+                onPress={() => startBooking(cat.key)}
+                style={{ width: 260, borderRadius: 16, overflow: 'hidden', backgroundColor: cat.color }}
+              >
+                <View style={{ padding: 18 }}>
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.6)', justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                    <Ionicons name={(cfg?.bannerIcon || cat.icon) as keyof typeof Ionicons.glyphMap} size={20} color="#0F172A" />
+                  </View>
+                  <Text style={{ color: '#0F172A', fontSize: 17, fontWeight: '800', marginBottom: 4 }}>{cfg?.bannerTitle || cat.label}</Text>
+                  <Text style={{ color: '#475569', fontSize: 11, marginBottom: 12, lineHeight: 16 }}>{cfg?.bannerSubtitle || 'Professional services at your door'}</Text>
+                  <View style={{ backgroundColor: '#fff', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: '#FF4F8B' }}>Book Now</Text>
+                    <Ionicons name="arrow-forward" size={11} color="#FF4F8B" />
+                  </View>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
       </View>
 
       {/* Categories */}

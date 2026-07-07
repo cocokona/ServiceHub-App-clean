@@ -10,7 +10,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { timeSlots, currentLocationDemo } from '../../data';
+import { timeSlots, currentLocationDemo, categoryConfig } from '../../data';
 
 export default function ScheduleDetails({ route, navigation }: any) {
   const { bookingData } = route.params || {};
@@ -126,7 +126,7 @@ export default function ScheduleDetails({ route, navigation }: any) {
             <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F172A' }}>{bookingData?.serviceType}</Text>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>
-            <Text style={{ fontSize: 12, color: '#64748B' }}>Rooms</Text>
+            <Text style={{ fontSize: 12, color: '#64748B' }}>{categoryConfig[bookingData?.serviceCategory]?.fieldLabel || 'Option'}</Text>
             <Text style={{ fontSize: 12, fontWeight: '600', color: '#0F172A' }}>{bookingData?.rooms}</Text>
           </View>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 }}>

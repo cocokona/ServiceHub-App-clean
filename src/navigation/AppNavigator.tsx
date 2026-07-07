@@ -23,6 +23,7 @@ import { User, Job } from '../types';
 import { initialJobs, storageKeys } from '../data';
 import { PINK, PLACEHOLDER } from '../theme/colors';
 import { apiGet, apiPost, apiPut } from '../api/client';
+import { fetchJobsByCustomer, fetchJobsByTechnician, fetchOrdersInProgress } from '../services/database.service';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -76,6 +77,7 @@ function TechnicianTabs() {
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = 'briefcase';
           if (route.name === 'Jobs') iconName = focused ? 'briefcase' : 'briefcase-outline';
+          else if (route.name === 'Pending') iconName = focused ? 'time' : 'time-outline';
           else if (route.name === 'Schedule') iconName = focused ? 'calendar' : 'calendar-outline';
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
@@ -85,6 +87,7 @@ function TechnicianTabs() {
       })}
     >
       <Tab.Screen name="Jobs" component={TechnicianDashboard} />
+      <Tab.Screen name="Pending" component={TechnicianDashboard} initialParams={{ tab: 'pending' }} />
       <Tab.Screen name="Schedule" component={TechnicianDashboard} initialParams={{ tab: 'schedule' }} />
       <Tab.Screen name="Profile" component={TechnicianDashboard} initialParams={{ tab: 'profile' }} />
     </Tab.Navigator>
@@ -111,11 +114,31 @@ export default function AppNavigator() {
   }, [user]);
 
   const refreshJobs = useCallback(async () => {
+    if (!user) return;
     try {
-      const data = await apiGet('/api/jobs');
-      if (Array.isArray(data)) setJobs(data);
-    } catch {}
-  }, []);
+      // Fetch confirmed/active jobs from jobs table
+      const dbJobs = user.role === 'technician'
+        ? await fetchJobsByTechnician(user.id)
+        : await fetchJobsByCustomer(user.id);
+
+      // Fetch pending orders from order_in_progress table
+      const pendingOrders = await fetchOrdersInProgress(user.id);
+
+      // Combine: pending orders first, then active jobs
+      setJobs([...pendingOrders, ...dbJobs]);
+    } catch {
+      // Fallback to mock data if Supabase is unavailable
+      try {
+        const data = await apiGet('/api/jobs');
+        if (Array.isArray(data)) setJobs(data);
+      } catch {}
+    }
+  }, [user]);
+
+  // Fetch jobs from Supabase when user is loaded
+  useEffect(() => {
+    if (user) refreshJobs();
+  }, [user, refreshJobs]);
 
   const updateJobStatus = useCallback((jobId: string, updates: Partial<Job>) => {
     setJobs((prev) =>

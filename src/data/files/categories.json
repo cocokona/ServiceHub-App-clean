@@ -5,5 +5,5 @@
     { "key": "electrical", "label": "Electrical", "icon": "flash", "color": "#D1FAE5" },
     { "key": "beauty", "label": "Beauty", "icon": "flower", "color": "#FCE7F3" }
   ],
-  "technicianFilters": ["all", "cleaning", "repair", "electrical"]
+  "technicianFilters": ["all", "cleaning", "repair", "electrical", "beauty"]
 }

@@ -11,8 +11,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Job } from '../../types';
 import { apiGet } from '../../api/client';
-import { rooms, durations, focusAreas, getBaseRate, getServiceTypeLabel, durationUnitCost } from '../../data';
-import { PINK, INK, MUTED, BORDER_LIGHT } from '../../theme/colors';
+import { durations, categoryConfig, durationUnitCost } from '../../data';
+import type { CategoryFieldConfig, FocusArea } from '../../data';
 
 interface TechProfile {
   id: string;
@@ -25,14 +25,34 @@ interface TechProfile {
   ratePerHour: number;
 }
 
+interface FocusAreaWithCheck extends FocusArea {
+  checked: boolean;
+}
+
+const fallbackConfig: CategoryFieldConfig = {
+  title: 'Service',
+  subtitle: 'Book a professional',
+  fieldLabel: 'Option',
+  fieldOptions: ['Standard', 'Premium'],
+  focusAreas: [],
+  baseRatesByField: {},
+  bannerTitle: 'Service',
+  bannerSubtitle: '',
+  bannerIcon: 'briefcase',
+};
+
 export default function ServiceDetails({ route, navigation }: any) {
   const { category, preferredTech } = route.params || {};
+  const config: CategoryFieldConfig = categoryConfig[category] || fallbackConfig;
+
   const [helpers, setHelpers] = useState<TechProfile[]>([]);
   const [selectedTech, setSelectedTech] = useState<TechProfile | null>(preferredTech || null);
-  const [selectedRooms, setSelectedRooms] = useState(rooms[1] || '3-4 Rooms');
+  const [selectedField, setSelectedField] = useState(config.fieldOptions[1] || config.fieldOptions[0] || '');
   const [selectedDuration, setSelectedDuration] = useState(durations[0] || 2);
   const [notes, setNotes] = useState('');
-  const [focusAreaState, setFocusAreaState] = useState(focusAreas.map((f) => ({ ...f, checked: false })));
+  const [focusAreaState, setFocusAreaState] = useState<FocusAreaWithCheck[]>(
+    config.focusAreas.map((f) => ({ ...f, checked: false }))
+  );
 
   useEffect(() => {
     apiGet(`/api/technicians?category=${category}`).then((data) => {
@@ -58,7 +78,7 @@ export default function ServiceDetails({ route, navigation }: any) {
     }
   }, [helpers, preferredTech]);
 
-  const baseRate = getBaseRate(selectedRooms);
+  const baseRate = config.baseRatesByField[selectedField] ?? 0;
   const durationCost = selectedDuration * durationUnitCost;
   const addOnsPrice = focusAreaState.filter((f) => f.checked).reduce((sum, f) => sum + f.price, 0);
   const totalPrice = baseRate + durationCost + addOnsPrice;
@@ -71,9 +91,9 @@ export default function ServiceDetails({ route, navigation }: any) {
 
   const handleNext = () => {
     const bookingData: Partial<Job> = {
-      serviceType: getServiceTypeLabel(category),
+      serviceType: config.title,
       serviceCategory: category,
-      rooms: selectedRooms,
+      rooms: selectedField,
       duration: selectedDuration,
       notes,
       focusAreas: focusAreaState.filter((f) => f.checked).map((f) => f.label),
@@ -93,27 +113,27 @@ export default function ServiceDetails({ route, navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 12 }}>
           <Ionicons name="arrow-back" size={22} color="#333" />
         </TouchableOpacity>
-        <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>Service Details</Text>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>{config.title}</Text>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 100 }}>
-        {/* Room Selection */}
-        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 10 }}>Room Size</Text>
+        {/* Field Selection (rooms / property type / scope / service type) */}
+        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 10 }}>{config.fieldLabel}</Text>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
-          {rooms.map((room) => (
+          {config.fieldOptions.map((opt) => (
             <TouchableOpacity
-              key={room}
-              onPress={() => setSelectedRooms(room)}
+              key={opt}
+              onPress={() => setSelectedField(opt)}
               style={{
                 paddingHorizontal: 14,
                 paddingVertical: 10,
                 borderRadius: 10,
                 borderWidth: 1,
-                borderColor: selectedRooms === room ? '#FF4F8B' : '#F1F5F9',
-                backgroundColor: selectedRooms === room ? 'rgba(255,79,139,0.05)' : '#FFFFFF',
+                borderColor: selectedField === opt ? '#FF4F8B' : '#F1F5F9',
+                backgroundColor: selectedField === opt ? 'rgba(255,79,139,0.05)' : '#FFFFFF',
               }}
             >
-              <Text style={{ fontSize: 12, fontWeight: '600', color: selectedRooms === room ? '#FF4F8B' : '#64748B' }}>{room}</Text>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: selectedField === opt ? '#FF4F8B' : '#64748B' }}>{opt}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -144,30 +164,34 @@ export default function ServiceDetails({ route, navigation }: any) {
           ))}
         </View>
 
-        {/* Focus Areas */}
-        <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 10 }}>Focus Areas</Text>
-        <View style={{ gap: 8, marginBottom: 24 }}>
-          {focusAreaState.map((area, i) => (
-            <TouchableOpacity
-              key={area.key}
-              onPress={() => toggleFocus(i)}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                padding: 12,
-                borderRadius: 10,
-                borderWidth: 1,
-                borderColor: area.checked ? '#FF4F8B' : '#F1F5F9',
-                backgroundColor: area.checked ? 'rgba(255,79,139,0.05)' : '#FFFFFF',
-                gap: 10,
-              }}
-            >
-              <Ionicons name={area.checked ? 'checkbox' : 'square-outline'} size={20} color={area.checked ? '#FF4F8B' : '#ccc'} />
-              <Text style={{ fontSize: 13, flex: 1 }}>{area.emoji} {area.label}</Text>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#FF4F8B' }}>+${area.price}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Focus Areas / Add-ons */}
+        {focusAreaState.length > 0 && (
+          <>
+            <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 10 }}>Add-on Services</Text>
+            <View style={{ gap: 8, marginBottom: 24 }}>
+              {focusAreaState.map((area, i) => (
+                <TouchableOpacity
+                  key={area.key}
+                  onPress={() => toggleFocus(i)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 12,
+                    borderRadius: 10,
+                    borderWidth: 1,
+                    borderColor: area.checked ? '#FF4F8B' : '#F1F5F9',
+                    backgroundColor: area.checked ? 'rgba(255,79,139,0.05)' : '#FFFFFF',
+                    gap: 10,
+                  }}
+                >
+                  <Ionicons name={area.checked ? 'checkbox' : 'square-outline'} size={20} color={area.checked ? '#FF4F8B' : '#ccc'} />
+                  <Text style={{ fontSize: 13, flex: 1 }}>{area.emoji} {area.label}</Text>
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: '#FF4F8B' }}>+${area.price}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
 
         {/* Notes */}
         <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 10 }}>Special Instructions</Text>

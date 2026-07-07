@@ -75,7 +75,7 @@ export default function ActiveService({ route, navigation }: any) {
         <View style={{ backgroundColor: '#FF4F8B', borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 20, shadowColor: '#FF4F8B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 4 }}>
           <Text style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Elapsed Time</Text>
           <Text style={{ fontSize: 40, fontWeight: '800', color: '#fff', fontVariant: ['tabular-nums'], letterSpacing: 2 }}>{formatTime(seconds)}</Text>
-          <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 8 }}>{job.serviceType} - {job.id}</Text>
+          <Text style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 8 }}>{job.serviceType} - {job.jobCode || job.id}</Text>
         </View>
 
         {/* Checklist */}
