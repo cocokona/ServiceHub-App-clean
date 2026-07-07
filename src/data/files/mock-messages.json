@@ -1,0 +1,27 @@
+{
+  "messages": [
+    {
+      "id": "m1",
+      "sender": "system",
+      "senderName": "System",
+      "content": "System: Connecting regarding Job ID: #8849-AC",
+      "timestamp": "10:41 AM"
+    },
+    {
+      "id": "m2",
+      "sender": "technician",
+      "senderName": "Alex Mercer",
+      "avatarKey": "alexMercerAlt",
+      "content": "I've arrived at the location but the gate code provided isn't working.",
+      "timestamp": "10:42 AM"
+    },
+    {
+      "id": "m3",
+      "sender": "support",
+      "senderName": "Sarah",
+      "avatarKey": "supportSarahAlt",
+      "content": "Checking with the customer now, please stand by.",
+      "timestamp": "10:43 AM"
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "defaultTtl": {
+    "services": 86400000,
+    "jobs": 300000,
+    "profiles": 1800000,
+    "technicians": 900000,
+    "messages": 0,
+    "reviews": 3600000
+  },
+  "registry": {
+    "services": {
+      "key": "services",
+      "ttl": 86400000,
+      "granularity": "full",
+      "eviction": "none",
+      "offlineFallback": "cache",
+      "warmupOnStart": true
+    },
+    "jobs": {
+      "key": "jobs",
+      "ttl": 300000,
+      "granularity": "incremental",
+      "eviction": "lru",
+      "offlineFallback": "cache",
+      "maxEntries": 200
+    },
+    "profiles": {
+      "key": "profiles",
+      "ttl": 1800000,
+      "granularity": "full",
+      "eviction": "lru",
+      "offlineFallback": "cache",
+      "maxEntries": 50
+    },
+    "technicians": {
+      "key": "technicians",
+      "ttl": 900000,
+      "granularity": "full",
+      "eviction": "lru",
+      "offlineFallback": "cache",
+      "maxEntries": 100
+    },
+    "messages": {
+      "key": "messages",
+      "ttl": 0,
+      "granularity": "incremental",
+      "eviction": "lru",
+      "offlineFallback": "placeholder",
+      "maxEntries": 500
+    },
+    "reviews": {
+      "key": "reviews",
+      "ttl": 3600000,
+      "granularity": "incremental",
+      "eviction": "lru",
+      "offlineFallback": "cache",
+      "maxEntries": 200
+    }
+  },
+  "defaultConfig": {
+    "ttl": 600000,
+    "granularity": "full",
+    "eviction": "lru",
+    "offlineFallback": "cache",
+    "maxEntries": 50
+  },
+  "storageLimits": {
+    "totalQuota": 209715200,
+    "warningThreshold": 0.75,
+    "criticalThreshold": 0.85,
+    "emergencyThreshold": 0.95,
+    "coreKeys": ["jobs", "profiles", "messages"],
+    "imageCacheRetentionDays": 7
+  }
+}

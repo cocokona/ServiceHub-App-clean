@@ -1,0 +1,15 @@
+{
+  "customer": {
+    "title": "I am a Customer",
+    "description": "Book verified professionals for your home repair, maintenance, and improvement needs."
+  },
+  "technician": {
+    "title": "I am a Technician",
+    "description": "Manage your jobs, schedule, and earnings with our streamlined professional tools."
+  },
+  "appName": "ServiceHub",
+  "appTagline": "The standard for home service excellence. Select your path to begin.",
+  "helpTitle": "ServiceHub Guide",
+  "helpMessage": "Customers can browse and schedule expert helpers. Technicians can manage service calls, checklists, timelines, and claim payouts.",
+  "helpLinkText": "Need help deciding?"
+}

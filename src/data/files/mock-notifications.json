@@ -1,0 +1,7 @@
+{
+  "notifications": [
+    { "id": "1", "title": "Service Confirmed", "message": "Your cleaning service is confirmed for tomorrow", "read": false },
+    { "id": "2", "title": "Promo", "message": "20% off your next booking", "read": true },
+    { "id": "3", "title": "Reminder", "message": "Rate your last service experience", "read": true }
+  ]
+}

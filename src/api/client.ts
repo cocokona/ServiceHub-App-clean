@@ -1,14 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { apiBaseUrl, apiTimeoutMs, storageKeys } from '../data';
 
 // For iOS Simulator: http://localhost:3000
 // For Android Emulator: http://10.0.2.2:3000
 // For Physical Device: http://<YOUR_MACHINE_IP>:3000
-const DEFAULT_BASE_URL = 'http://192.168.1.100:3000';
-
-const TIMEOUT_MS = 10000;
+// Configured in src/data/files/app-config.json
+const DEFAULT_BASE_URL = apiBaseUrl;
+const TIMEOUT_MS = apiTimeoutMs;
 
 async function getBaseUrl(): Promise<string> {
-  const saved = await AsyncStorage.getItem('api_base_url');
+  const saved = await AsyncStorage.getItem(storageKeys.apiBaseUrl);
   return saved || DEFAULT_BASE_URL;
 }
 
@@ -55,5 +56,5 @@ export async function apiPut(path: string, body: any): Promise<any> {
 }
 
 export async function setApiBaseUrl(url: string): Promise<void> {
-  await AsyncStorage.setItem('api_base_url', url);
+  await AsyncStorage.setItem(storageKeys.apiBaseUrl, url);
 }

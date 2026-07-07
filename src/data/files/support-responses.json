@@ -1,0 +1,27 @@
+{
+  "defaultResponse": "Thank you for your message. I'm looking into this and will have an update for you shortly.",
+  "supportAgentName": "Sarah",
+  "responseDelayMs": 1500,
+  "patterns": [
+    {
+      "keywords": ["gate", "code"],
+      "response": "I've contacted the customer for the updated gate code. Please stand by."
+    },
+    {
+      "keywords": ["arrive", "here"],
+      "response": "Thank you for letting us know. The customer has been notified of your arrival."
+    },
+    {
+      "keywords": ["cancel"],
+      "response": "I can help with that. Would you like me to process a cancellation request?"
+    },
+    {
+      "keywords": ["complete", "done"],
+      "response": "Great! I'll mark this service as completed. Thank you for your excellent work!"
+    },
+    {
+      "keywords": ["hello", "hi"],
+      "response": "Hello! How can I assist you with this service order today?"
+    }
+  ]
+}

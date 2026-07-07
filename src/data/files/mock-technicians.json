@@ -1,0 +1,20 @@
+{
+  "technicians": [
+    {
+      "name": "Sarah Jenkins",
+      "avatarKey": "femaleTechSarah",
+      "rating": 4.9,
+      "reviewsCount": 124,
+      "specialty": "Deep Cleaning Expert",
+      "ratePerHour": 45
+    },
+    {
+      "name": "Michael Chen",
+      "avatarKey": "maleTechMichael",
+      "rating": 4.8,
+      "reviewsCount": 89,
+      "specialty": "Master Plumber",
+      "ratePerHour": 60
+    }
+  ]
+}

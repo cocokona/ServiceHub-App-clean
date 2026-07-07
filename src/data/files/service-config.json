@@ -1,0 +1,30 @@
+{
+  "rooms": ["1-2 Rooms", "3-4 Rooms", "5-6 Rooms", "7+ Rooms"],
+  "durations": [2, 4, 6],
+  "durationUnitCost": 20,
+  "focusAreas": [
+    { "key": "kitchen", "label": "Kitchen Deep Cleaning", "emoji": "🍳", "price": 25 },
+    { "key": "bathroom", "label": "Bathroom Sanitation", "emoji": "🚿", "price": 20 },
+    { "key": "windows", "label": "Window Cleaning", "emoji": "🪟", "price": 15 },
+    { "key": "garage", "label": "Garage Organization", "emoji": "🏠", "price": 30 }
+  ],
+  "baseRatesByRoom": {
+    "1-2 Rooms": 60,
+    "3-4 Rooms": 90,
+    "5-6 Rooms": 130,
+    "7+ Rooms": 170
+  },
+  "serviceTypeMap": {
+    "cleaning": "Deep Cleaning",
+    "repair": "Repair Service",
+    "electrical": "Electrical Service",
+    "beauty": "Beauty Service"
+  },
+  "timeSlots": [
+    { "key": "morning", "label": "Morning", "time": "8 AM - 12 PM", "icon": "sunny" },
+    { "key": "afternoon", "label": "Afternoon", "time": "12 PM - 5 PM", "icon": "partly-sunny" },
+    { "key": "evening", "label": "Evening", "time": "5 PM - 9 PM", "icon": "moon" }
+  ],
+  "defaultTravelFee": 10,
+  "defaultTax": 0
+}

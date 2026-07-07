@@ -1,0 +1,21 @@
+{
+  "cities": [
+    "San Francisco, CA",
+    "Los Angeles, CA",
+    "New York, NY",
+    "Chicago, IL",
+    "Seattle, WA"
+  ],
+  "defaultLocation": "San Francisco, CA",
+  "currentLocationDemo": {
+    "street": "123 Main St",
+    "city": "San Francisco",
+    "zipCode": "98101"
+  },
+  "daysOfWeek": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+  "scheduleSlots": [
+    "Morning (8AM-12PM)",
+    "Afternoon (12PM-5PM)",
+    "Evening (5PM-9PM)"
+  ]
+}

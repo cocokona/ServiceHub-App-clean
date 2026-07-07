@@ -20,7 +20,8 @@ import JobDetails from '../screens/technician/JobDetails';
 import ActiveService from '../screens/technician/ActiveService';
 import ServiceCompletion from '../screens/technician/ServiceCompletion';
 import { User, Job } from '../types';
-import { INITIAL_JOBS } from '../data/constants';
+import { initialJobs, storageKeys } from '../data';
+import { PINK, PLACEHOLDER } from '../theme/colors';
 import { apiGet, apiPost, apiPut } from '../api/client';
 
 const Stack = createNativeStackNavigator();
@@ -56,8 +57,8 @@ function CustomerTabs() {
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#003d9b',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: PINK,
+        tabBarInactiveTintColor: PLACEHOLDER,
       })}
     >
       <Tab.Screen name="Home" component={CustomerHome} />
@@ -79,8 +80,8 @@ function TechnicianTabs() {
           else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#003d9b',
-        tabBarInactiveTintColor: 'gray',
+        tabBarActiveTintColor: PINK,
+        tabBarInactiveTintColor: PLACEHOLDER,
       })}
     >
       <Tab.Screen name="Jobs" component={TechnicianDashboard} />
@@ -92,11 +93,11 @@ function TechnicianTabs() {
 
 export default function AppNavigator() {
   const [user, setUser] = useState<User | null>(null);
-  const [jobs, setJobs] = useState<Job[]>(INITIAL_JOBS);
+  const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    AsyncStorage.getItem('sh_user').then((val) => {
+    AsyncStorage.getItem(storageKeys.user).then((val) => {
       if (val) {
         try { setUser(JSON.parse(val)); } catch {}
       }
@@ -105,8 +106,8 @@ export default function AppNavigator() {
   }, []);
 
   useEffect(() => {
-    if (user) AsyncStorage.setItem('sh_user', JSON.stringify(user));
-    else AsyncStorage.removeItem('sh_user');
+    if (user) AsyncStorage.setItem(storageKeys.user, JSON.stringify(user));
+    else AsyncStorage.removeItem(storageKeys.user);
   }, [user]);
 
   const refreshJobs = useCallback(async () => {
@@ -125,7 +126,7 @@ export default function AppNavigator() {
 
   const logout = useCallback(() => {
     setUser(null);
-    AsyncStorage.removeItem('sh_user');
+    AsyncStorage.removeItem(storageKeys.user);
   }, []);
 
   const contextValue = useMemo(() => ({
@@ -140,9 +141,9 @@ export default function AppNavigator() {
 
   if (loading) {
     return (
-      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' }}>
-        <ActivityIndicator size="large" color="#003d9b" />
-        <Text style={{ marginTop: 12, color: '#666', fontWeight: '600' }}>Loading...</Text>
+      <SafeAreaView style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FAFBFC' }}>
+        <ActivityIndicator size="large" color={PINK} />
+        <Text style={{ marginTop: 12, color: '#64748B', fontWeight: '600' }}>Loading...</Text>
       </SafeAreaView>
     );
   }

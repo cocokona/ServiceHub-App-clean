@@ -1,0 +1,65 @@
+{
+  "retryConfig": {
+    "maxRetries": 3,
+    "delays": [0, 2000, 5000],
+    "timeouts": [2000, 3000, 5000]
+  },
+  "registry": {
+    "jobs": {
+      "key": "jobs",
+      "incrementField": "updated_at",
+      "tableName": "jobs",
+      "conflictStrategy": "last_write_wins",
+      "priority": "high",
+      "realtimeEnabled": false,
+      "batchSize": 50
+    },
+    "messages": {
+      "key": "messages",
+      "incrementField": "created_at",
+      "tableName": "messages",
+      "conflictStrategy": "last_write_wins",
+      "priority": "high",
+      "realtimeEnabled": true,
+      "batchSize": 100
+    },
+    "profiles": {
+      "key": "profiles",
+      "incrementField": "updated_at",
+      "tableName": "profiles",
+      "conflictStrategy": "last_write_wins",
+      "priority": "normal",
+      "realtimeEnabled": true,
+      "batchSize": 10
+    },
+    "technicians": {
+      "key": "technicians",
+      "incrementField": "updated_at",
+      "tableName": "profiles",
+      "conflictStrategy": "last_write_wins",
+      "priority": "normal",
+      "realtimeEnabled": false,
+      "batchSize": 50
+    },
+    "services": {
+      "key": "services",
+      "incrementField": "updated_at",
+      "tableName": "services",
+      "conflictStrategy": "last_write_wins",
+      "priority": "low",
+      "realtimeEnabled": false,
+      "batchSize": 100
+    },
+    "reviews": {
+      "key": "reviews",
+      "incrementField": "created_at",
+      "tableName": "reviews",
+      "conflictStrategy": "last_write_wins",
+      "priority": "low",
+      "realtimeEnabled": false,
+      "batchSize": 30
+    }
+  },
+  "queueKey": "sh_sync_queue",
+  "lastSyncKey": "sh_last_sync"
+}

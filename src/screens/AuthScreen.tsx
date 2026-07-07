@@ -18,6 +18,14 @@ import { fetchServiceCategories, ServiceCategory } from '../services/database.se
 
 type AuthPhase = 'form' | 'confirming-email';
 
+// Delight Experience palette
+const PINK = '#FF4F8B';
+const PINK_SOFT = '#FFE2EC';
+const PINK_TINT = '#FFF1F6';
+const PINK_DEEP = '#E03572';
+const INK = '#0F172A';
+const MUTED = '#64748B';
+
 export default function AuthScreen({ navigation }: any) {
   const { setUser } = useContext(AppContext);
   const [phase, setPhase] = useState<AuthPhase>('form');
@@ -160,7 +168,7 @@ export default function AuthScreen({ navigation }: any) {
   // ─── Email Confirmation Pending View ───
   if (phase === 'confirming-email') {
     return (
-      <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -172,54 +180,54 @@ export default function AuthScreen({ navigation }: any) {
           <View style={{ alignItems: 'center', marginBottom: 32 }}>
             <View
               style={{
-                width: 72,
-                height: 72,
+                width: 64,
+                height: 64,
                 borderRadius: 20,
-                backgroundColor: '#003d9b',
+                backgroundColor: PINK,
                 justifyContent: 'center',
                 alignItems: 'center',
                 marginBottom: 20,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.1,
-                shadowRadius: 4,
-                elevation: 3,
+                shadowColor: PINK,
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.25,
+                shadowRadius: 16,
+                elevation: 6,
               }}
             >
-              <Ionicons name="mail" size={36} color="#fff" />
+              <Ionicons name="mail" size={32} color="#fff" />
             </View>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: '#003d9b', letterSpacing: -0.5 }}>
-              Check Your Email
+            <Text style={{ fontSize: 24, fontWeight: '800', color: INK, letterSpacing: -0.5 }}>
+              Almost there! 💌
             </Text>
-            <Text style={{ fontSize: 13, color: '#666', fontWeight: '500', marginTop: 8, textAlign: 'center' }}>
+            <Text style={{ fontSize: 13, color: MUTED, fontWeight: '500', marginTop: 8, textAlign: 'center' }}>
               We sent a confirmation link to{'\n'}
-              <Text style={{ fontWeight: '700', color: '#003d9b' }}>{email}</Text>
+              <Text style={{ fontWeight: '700', color: PINK }}>{email}</Text>
             </Text>
           </View>
 
           <View
             style={{
               backgroundColor: '#fff',
-              borderRadius: 16,
+              borderRadius: 24,
               borderWidth: 1,
-              borderColor: '#e0e2ec',
+              borderColor: '#F1F5F9',
               padding: 24,
               shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.08,
-              shadowRadius: 8,
-              elevation: 3,
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.06,
+              shadowRadius: 12,
+              elevation: 2,
             }}
           >
             {errorMsg && (
-              <View style={{ backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="alert-circle" size={16} color="#ef4444" />
-                <Text style={{ fontSize: 12, fontWeight: '600', color: '#dc2626', flex: 1 }}>{errorMsg}</Text>
+              <View style={{ backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="alert-circle" size={16} color="#EF4444" />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#DC2626', flex: 1 }}>{errorMsg}</Text>
               </View>
             )}
 
-            <Text style={{ fontSize: 13, color: '#666', fontWeight: '500', lineHeight: 20, marginBottom: 20 }}>
-              Click the confirmation link in your email to activate your account. If you don't see it, check your spam folder.
+            <Text style={{ fontSize: 13, color: MUTED, fontWeight: '500', lineHeight: 20, marginBottom: 20 }}>
+              Tap the link in your email to activate your account. Don't see it? Peek inside your spam folder 📬
             </Text>
 
             {/* Resend button */}
@@ -227,14 +235,19 @@ export default function AuthScreen({ navigation }: any) {
               onPress={handleResend}
               disabled={resendLoading || resendCooldown > 0}
               style={{
-                backgroundColor: resendCooldown > 0 ? '#e2e8f0' : '#003d9b',
-                paddingVertical: 14,
-                borderRadius: 12,
+                backgroundColor: resendCooldown > 0 ? '#E2E8F0' : PINK,
+                paddingVertical: 16,
+                borderRadius: 999,
                 flexDirection: 'row',
                 justifyContent: 'center',
                 alignItems: 'center',
                 gap: 6,
                 marginBottom: 12,
+                shadowColor: resendCooldown > 0 ? 'transparent' : PINK,
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.25,
+                shadowRadius: 12,
+                elevation: resendCooldown > 0 ? 0 : 3,
               }}
             >
               {resendLoading ? (
@@ -243,7 +256,7 @@ export default function AuthScreen({ navigation }: any) {
                 <>
                   <Ionicons name="refresh" size={16} color="#fff" />
                   <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>
-                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend Confirmation Email'}
+                    {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend the magic link'}
                   </Text>
                 </>
               )}
@@ -254,11 +267,9 @@ export default function AuthScreen({ navigation }: any) {
               onPress={handleTrySignIn}
               disabled={loading}
               style={{
-                backgroundColor: loading ? '#e2e8f0' : 'transparent',
-                paddingVertical: 14,
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: '#003d9b',
+                backgroundColor: loading ? '#E2E8F0' : PINK_TINT,
+                paddingVertical: 16,
+                borderRadius: 999,
                 flexDirection: 'row',
                 justifyContent: 'center',
                 alignItems: 'center',
@@ -267,12 +278,12 @@ export default function AuthScreen({ navigation }: any) {
               }}
             >
               {loading ? (
-                <ActivityIndicator size="small" color="#003d9b" />
+                <ActivityIndicator size="small" color={PINK} />
               ) : (
                 <>
-                  <Ionicons name="log-in" size={16} color="#003d9b" />
-                  <Text style={{ color: '#003d9b', fontSize: 13, fontWeight: '700' }}>
-                    I've Confirmed — Sign Me In
+                  <Ionicons name="sparkles" size={16} color={PINK} />
+                  <Text style={{ color: PINK, fontSize: 13, fontWeight: '700' }}>
+                    I'm in — Take me home
                   </Text>
                 </>
               )}
@@ -283,8 +294,8 @@ export default function AuthScreen({ navigation }: any) {
               onPress={() => { setPhase('form'); setIsLogin(true); setErrorMsg(null); }}
               style={{ alignItems: 'center', paddingVertical: 8 }}
             >
-              <Text style={{ fontSize: 13, color: '#666', fontWeight: '600' }}>
-                ← Back to Sign In
+              <Text style={{ fontSize: 13, color: MUTED, fontWeight: '600' }}>
+                ← Back to sign in
               </Text>
             </TouchableOpacity>
           </View>
@@ -294,293 +305,384 @@ export default function AuthScreen({ navigation }: any) {
   );
   }
 
-  // ─── Normal Login / Register Form ───
+  // ─── Welcome Magic — Login / Register Form ───
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: 24 }}
+          contentContainerStyle={{ flexGrow: 1, padding: 24 }}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-        {/* Header */}
-        <View style={{ alignItems: 'center', marginBottom: 32 }}>
+          {/* Pastel Hero */}
           <View
             style={{
-              width: 56,
-              height: 56,
-              borderRadius: 16,
-              backgroundColor: '#003d9b',
-              justifyContent: 'center',
+              marginHorizontal: -24,
+              paddingTop: 36,
+              paddingBottom: 44,
+              paddingHorizontal: 24,
               alignItems: 'center',
-              marginBottom: 16,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.1,
-              shadowRadius: 4,
-              elevation: 3,
+              backgroundColor: '#FFE2EC',
+              // Soft pastel gradient feel via overlay views
+              position: 'relative',
+              overflow: 'hidden',
+              marginBottom: 28,
             }}
           >
-            <Ionicons name="construct" size={28} color="#fff" />
-          </View>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: '#003d9b', letterSpacing: -0.5 }}>
-            ServiceHub Pro
-          </Text>
-          <Text style={{ fontSize: 12, color: '#666', fontWeight: '600', marginTop: 4 }}>
-            {isLogin ? 'Welcome back! Secure access port.' : 'Create your secure account.'}
-          </Text>
-        </View>
-
-        {/* Card */}
-        <View
-          style={{
-            backgroundColor: '#fff',
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: '#e0e2ec',
-            padding: 24,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.08,
-            shadowRadius: 8,
-            elevation: 3,
-          }}
-        >
-          {/* Toggle */}
-          <View style={{ flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 12, padding: 4, marginBottom: 20 }}>
-            <TouchableOpacity
-              onPress={() => { setIsLogin(true); setErrorMsg(null); }}
+            {/* Decorative pastel bubbles */}
+            <View
               style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 10,
-                backgroundColor: isLogin ? '#fff' : 'transparent',
-                shadowColor: isLogin ? '#000' : 'transparent',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: isLogin ? 0.05 : 0,
-                shadowRadius: 2,
-                elevation: isLogin ? 1 : 0,
+                position: 'absolute',
+                top: -50,
+                right: -40,
+                width: 180,
+                height: 180,
+                borderRadius: 90,
+                backgroundColor: '#FCD7E7',
+                opacity: 0.7,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                bottom: -60,
+                left: -50,
+                width: 200,
+                height: 200,
+                borderRadius: 100,
+                backgroundColor: '#E0EAFE',
+                opacity: 0.6,
+              }}
+            />
+            <View
+              style={{
+                position: 'absolute',
+                top: 40,
+                left: 30,
+                width: 80,
+                height: 80,
+                borderRadius: 40,
+                backgroundColor: '#FEF3C7',
+                opacity: 0.6,
+              }}
+            />
+
+            <View
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 18,
+                backgroundColor: PINK,
+                justifyContent: 'center',
                 alignItems: 'center',
+                marginBottom: 16,
+                shadowColor: PINK,
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.3,
+                shadowRadius: 16,
+                elevation: 6,
               }}
             >
-              <Text style={{ fontSize: 12, fontWeight: '700', color: isLogin ? '#003d9b' : '#666' }}>
-                Sign In
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => { setIsLogin(false); setErrorMsg(null); }}
-              style={{
-                flex: 1,
-                paddingVertical: 10,
-                borderRadius: 10,
-                backgroundColor: !isLogin ? '#fff' : 'transparent',
-                shadowColor: !isLogin ? '#000' : 'transparent',
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: !isLogin ? 0.05 : 0,
-                shadowRadius: 2,
-                elevation: !isLogin ? 1 : 0,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 12, fontWeight: '700', color: !isLogin ? '#003d9b' : '#666' }}>
-                Register
-              </Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Error */}
-          {errorMsg && (
-            <View style={{ backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fecaca', borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Ionicons name="alert-circle" size={16} color="#ef4444" />
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#dc2626', flex: 1 }}>{errorMsg}</Text>
+              <Ionicons name="sparkles" size={26} color="#fff" />
             </View>
-          )}
+            <Text style={{ fontSize: 26, fontWeight: '800', color: INK, letterSpacing: -0.5 }}>
+              ServiceHub Pro
+            </Text>
+            <Text
+              style={{
+                fontSize: 13,
+                color: MUTED,
+                fontWeight: '600',
+                marginTop: 6,
+                textAlign: 'center',
+                lineHeight: 18,
+              }}
+            >
+              Home services, but make it delightful ✨
+            </Text>
+          </View>
 
-          {/* Name (Register) */}
-          {!isLogin && (
-            <View style={{ marginBottom: 16 }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-                Full Name
+          {/* Welcome copy */}
+          <View style={{ marginBottom: 20, paddingHorizontal: 4 }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: INK, letterSpacing: -0.4 }}>
+              {isLogin ? 'Welcome back, friend!' : "Hey there! Let's get started"}
+            </Text>
+            <Text style={{ fontSize: 13, color: MUTED, fontWeight: '500', marginTop: 6, lineHeight: 19 }}>
+              {isLogin
+                ? "Your spotless home is waiting. Let's make it happen."
+                : "Create an account in seconds. No fuss, no clutter."}
+            </Text>
+          </View>
+
+          {/* Card */}
+          <View
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: 24,
+              borderWidth: 1,
+              borderColor: '#F1F5F9',
+              padding: 20,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.04,
+              shadowRadius: 12,
+              elevation: 1,
+            }}
+          >
+            {/* Toggle */}
+            <View style={{ flexDirection: 'row', backgroundColor: '#F8FAFC', borderRadius: 999, padding: 4, marginBottom: 20 }}>
+              <TouchableOpacity
+                onPress={() => { setIsLogin(true); setErrorMsg(null); }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 999,
+                  backgroundColor: isLogin ? PINK : 'transparent',
+                  alignItems: 'center',
+                  shadowColor: isLogin ? PINK : 'transparent',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: isLogin ? 0.25 : 0,
+                  shadowRadius: 8,
+                  elevation: isLogin ? 2 : 0,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: isLogin ? '#fff' : MUTED }}>
+                  Sign In
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => { setIsLogin(false); setErrorMsg(null); }}
+                style={{
+                  flex: 1,
+                  paddingVertical: 10,
+                  borderRadius: 999,
+                  backgroundColor: !isLogin ? PINK : 'transparent',
+                  alignItems: 'center',
+                  shadowColor: !isLogin ? PINK : 'transparent',
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: !isLogin ? 0.25 : 0,
+                  shadowRadius: 8,
+                  elevation: !isLogin ? 2 : 0,
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: !isLogin ? '#fff' : MUTED }}>
+                  Register
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Error */}
+            {errorMsg && (
+              <View style={{ backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', borderRadius: 12, padding: 12, marginBottom: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="alert-circle" size={16} color="#EF4444" />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#DC2626', flex: 1 }}>{errorMsg}</Text>
+              </View>
+            )}
+
+            {/* Name (Register) */}
+            {!isLogin && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>
+                  Full Name
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, backgroundColor: PINK_TINT, paddingHorizontal: 14 }}>
+                  <Ionicons name="person-outline" size={16} color={PINK} />
+                  <TextInput
+                    placeholder="e.g. Alex Mercer"
+                    value={name}
+                    onChangeText={setName}
+                    style={{ flex: 1, paddingVertical: 13, paddingLeft: 10, fontSize: 13, fontWeight: '600', color: INK }}
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
+              </View>
+            )}
+
+            {/* Email */}
+            <View style={{ marginBottom: 14 }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>
+                Email
               </Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e0e2ec', borderRadius: 12, backgroundColor: '#f8fafc', paddingHorizontal: 12 }}>
-                <Ionicons name="person-outline" size={16} color="#999" />
+              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, backgroundColor: PINK_TINT, paddingHorizontal: 14 }}>
+                <Ionicons name="mail-outline" size={16} color={PINK} />
                 <TextInput
-                  placeholder="e.g. Alex Mercer"
-                  value={name}
-                  onChangeText={setName}
-                  style={{ flex: 1, paddingVertical: 12, paddingLeft: 10, fontSize: 13, fontWeight: '600' }}
-                  placeholderTextColor="#aaa"
+                  placeholder="you@domain.com"
+                  value={email}
+                  onChangeText={setEmail}
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  style={{ flex: 1, paddingVertical: 13, paddingLeft: 10, fontSize: 13, fontWeight: '600', color: INK }}
+                  placeholderTextColor="#94A3B8"
                 />
               </View>
             </View>
-          )}
 
-          {/* Email */}
-          <View style={{ marginBottom: 16 }}>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-              Email Address
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e0e2ec', borderRadius: 12, backgroundColor: '#f8fafc', paddingHorizontal: 12 }}>
-              <Ionicons name="mail-outline" size={16} color="#999" />
-              <TextInput
-                placeholder="you@domain.com"
-                value={email}
-                onChangeText={setEmail}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                style={{ flex: 1, paddingVertical: 12, paddingLeft: 10, fontSize: 13, fontWeight: '600' }}
-                placeholderTextColor="#aaa"
-              />
-            </View>
-          </View>
-
-          {/* Password */}
-          <View style={{ marginBottom: 16 }}>
-            <Text style={{ fontSize: 10, fontWeight: '700', color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 }}>
-              Password
-            </Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#e0e2ec', borderRadius: 12, backgroundColor: '#f8fafc', paddingHorizontal: 12 }}>
-              <Ionicons name="lock-closed-outline" size={16} color="#999" />
-              <TextInput
-                placeholder="At least 6 characters"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                style={{ flex: 1, paddingVertical: 12, paddingLeft: 10, fontSize: 13, fontWeight: '600' }}
-                placeholderTextColor="#aaa"
-              />
-            </View>
-          </View>
-
-          {/* Role selector (Register) */}
-          {!isLogin && (
-            <View style={{ marginBottom: 16 }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
-                Account Role
+            {/* Password */}
+            <View style={{ marginBottom: 14 }}>
+              <Text style={{ fontSize: 10, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 }}>
+                Password
               </Text>
-              <View style={{ flexDirection: 'row', gap: 12 }}>
-                {(['customer', 'technician'] as const).map((r) => (
-                  <TouchableOpacity
-                    key={r}
-                    onPress={() => setRole(r)}
-                    style={{
-                      flex: 1,
-                      padding: 12,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderColor: role === r ? '#003d9b' : '#e0e2ec',
-                      backgroundColor: role === r ? 'rgba(0,61,155,0.05)' : '#fff',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    <Ionicons name={r === 'customer' ? 'home' : 'construct'} size={18} color={role === r ? '#003d9b' : '#666'} />
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: role === r ? '#003d9b' : '#666' }}>
-                      {r === 'customer' ? 'Customer' : 'Technician'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              <View style={{ flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#E5E7EB', borderRadius: 14, backgroundColor: PINK_TINT, paddingHorizontal: 14 }}>
+                <Ionicons name="lock-closed-outline" size={16} color={PINK} />
+                <TextInput
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry
+                  style={{ flex: 1, paddingVertical: 13, paddingLeft: 10, fontSize: 13, fontWeight: '600', color: INK }}
+                  placeholderTextColor="#94A3B8"
+                />
               </View>
             </View>
-          )}
 
-          {/* Work Category (Technician) */}
-          {!isLogin && role === 'technician' && (
-            <View style={{ marginBottom: 16 }}>
-              <Text style={{ fontSize: 10, fontWeight: '700', color: '#666', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>
-                Specialty Work Category
-              </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                <TouchableOpacity
-                  onPress={() => setWorkCategory('all')}
-                  style={{
-                    paddingVertical: 10,
-                    paddingHorizontal: 16,
-                    borderRadius: 10,
-                    borderWidth: 1,
-                    borderColor: workCategory === 'all' ? '#003d9b' : '#e0e2ec',
-                    backgroundColor: workCategory === 'all' ? 'rgba(0,61,155,0.05)' : '#fff',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  <Ionicons name="apps" size={14} color={workCategory === 'all' ? '#003d9b' : '#666'} />
-                  <Text style={{ fontSize: 12, fontWeight: '700', color: workCategory === 'all' ? '#003d9b' : '#666' }}>
-                    All
-                  </Text>
-                </TouchableOpacity>
-                {serviceCategories.map((cat) => (
+            {/* Role selector (Register) */}
+            {!isLogin && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
+                  I'm a...
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  {(['customer', 'technician'] as const).map((r) => (
+                    <TouchableOpacity
+                      key={r}
+                      onPress={() => setRole(r)}
+                      style={{
+                        flex: 1,
+                        padding: 12,
+                        borderRadius: 14,
+                        borderWidth: 1.5,
+                        borderColor: role === r ? PINK : '#E5E7EB',
+                        backgroundColor: role === r ? PINK_SOFT : '#fff',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Ionicons name={r === 'customer' ? 'home' : 'construct'} size={18} color={role === r ? PINK : MUTED} />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: role === r ? PINK : MUTED }}>
+                        {r === 'customer' ? 'Customer' : 'Technician'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Work Category (Technician) */}
+            {!isLogin && role === 'technician' && (
+              <View style={{ marginBottom: 14 }}>
+                <Text style={{ fontSize: 10, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 8 }}>
+                  Specialty
+                </Text>
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
                   <TouchableOpacity
-                    key={cat.key}
-                    onPress={() => setWorkCategory(cat.key)}
+                    onPress={() => setWorkCategory('all')}
                     style={{
-                      paddingVertical: 10,
-                      paddingHorizontal: 16,
-                      borderRadius: 10,
-                      borderWidth: 1,
-                      borderColor: workCategory === cat.key ? '#003d9b' : '#e0e2ec',
-                      backgroundColor: workCategory === cat.key ? 'rgba(0,61,155,0.05)' : '#fff',
+                      paddingVertical: 9,
+                      paddingHorizontal: 14,
+                      borderRadius: 999,
+                      borderWidth: 1.5,
+                      borderColor: workCategory === 'all' ? PINK : '#E5E7EB',
+                      backgroundColor: workCategory === 'all' ? PINK_SOFT : '#fff',
                       flexDirection: 'row',
                       alignItems: 'center',
                       gap: 6,
                     }}
                   >
-                    <Ionicons name={cat.icon} size={14} color={workCategory === cat.key ? '#003d9b' : '#666'} />
-                    <Text style={{ fontSize: 12, fontWeight: '700', color: workCategory === cat.key ? '#003d9b' : '#666' }}>
-                      {cat.label}
+                    <Ionicons name="apps" size={14} color={workCategory === 'all' ? PINK : MUTED} />
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: workCategory === 'all' ? PINK : MUTED }}>
+                      All
                     </Text>
                   </TouchableOpacity>
-                ))}
+                  {serviceCategories.map((cat) => (
+                    <TouchableOpacity
+                      key={cat.key}
+                      onPress={() => setWorkCategory(cat.key)}
+                      style={{
+                        paddingVertical: 9,
+                        paddingHorizontal: 14,
+                        borderRadius: 999,
+                        borderWidth: 1.5,
+                        borderColor: workCategory === cat.key ? PINK : '#E5E7EB',
+                        backgroundColor: workCategory === cat.key ? PINK_SOFT : '#fff',
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
+                    >
+                      <Ionicons name={cat.icon} size={14} color={workCategory === cat.key ? PINK : MUTED} />
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: workCategory === cat.key ? PINK : MUTED }}>
+                        {cat.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <Text style={{ fontSize: 10, color: MUTED, fontWeight: '600', marginTop: 6 }}>
+                  Filters which jobs show up on your dashboard.
+                </Text>
               </View>
-              <Text style={{ fontSize: 10, color: '#999', fontWeight: '600', marginTop: 6 }}>
-                This will filter dispatch job listings to your specialty.
-              </Text>
-            </View>
-          )}
-
-          {/* Submit */}
-          <TouchableOpacity
-            onPress={handleSubmit}
-            disabled={loading}
-            style={{
-              backgroundColor: loading ? '#d8e2ff' : '#003d9b',
-              paddingVertical: 14,
-              borderRadius: 12,
-              flexDirection: 'row',
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 6,
-              marginTop: 8,
-            }}
-          >
-            {loading ? (
-              <>
-                <ActivityIndicator size="small" color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Synchronizing...
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  {isLogin ? 'Sign In Securely' : 'Construct Account'}
-                </Text>
-                <Ionicons name="arrow-forward" size={14} color="#fff" />
-              </>
             )}
-          </TouchableOpacity>
-        </View>
 
-        {/* Trust seal */}
-        <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24, gap: 6 }}>
-          <Ionicons name="shield-checkmark" size={12} color="#006c47" />
-          <Text style={{ fontSize: 10, color: '#999', fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Supabase Auth . JWT . bcrypt . RLS Protected
-          </Text>
-        </View>
+            {/* Submit — Let's Go pill button */}
+            <TouchableOpacity
+              onPress={handleSubmit}
+              disabled={loading}
+              activeOpacity={0.85}
+              style={{
+                backgroundColor: loading ? PINK_SOFT : PINK,
+                paddingVertical: 16,
+                borderRadius: 999,
+                flexDirection: 'row',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 8,
+                marginTop: 8,
+                shadowColor: loading ? 'transparent' : PINK,
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: loading ? 0 : 0.3,
+                shadowRadius: 16,
+                elevation: loading ? 0 : 4,
+              }}
+            >
+              {loading ? (
+                <>
+                  <ActivityIndicator size="small" color={PINK} />
+                  <Text style={{ color: PINK, fontSize: 13, fontWeight: '800' }}>
+                    Signing you in...
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>
+                    {isLogin ? "Let's Go" : "Create my account"}
+                  </Text>
+                  <Ionicons name="arrow-forward" size={16} color="#fff" />
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* New here? Create account */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', marginTop: 22, gap: 6 }}>
+            <Text style={{ fontSize: 13, color: MUTED, fontWeight: '500' }}>
+              {isLogin ? 'New here?' : 'Already with us?'}
+            </Text>
+            <TouchableOpacity onPress={() => { setIsLogin(!isLogin); setErrorMsg(null); }}>
+              <Text style={{ fontSize: 13, color: PINK, fontWeight: '700' }}>
+                {isLogin ? 'Create account' : 'Sign in'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Trust seal */}
+          <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 18, gap: 6 }}>
+            <Ionicons name="shield-checkmark" size={12} color={PINK} />
+            <Text style={{ fontSize: 10, color: MUTED, fontWeight: '600', letterSpacing: 0.3 }}>
+              Secured with love · Your data is safe with us
+            </Text>
+          </View>
       </ScrollView>
     </KeyboardAvoidingView>
   </SafeAreaView>

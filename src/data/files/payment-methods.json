@@ -1,0 +1,11 @@
+{
+  "methods": [
+    { "key": "credit_card", "label": "Credit Card", "icon": "card-outline", "last4": "4242" },
+    { "key": "digital_wallet", "label": "Digital Wallet", "icon": "wallet-outline" },
+    { "key": "cash", "label": "Cash on Delivery", "icon": "cash-outline" }
+  ],
+  "defaultChecklist": [
+    { "text": "Service started", "completed": false },
+    { "text": "Service completed", "completed": false }
+  ]
+}

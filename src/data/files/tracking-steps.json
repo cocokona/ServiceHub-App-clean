@@ -1,0 +1,27 @@
+{
+  "steps": [
+    { "key": "confirmed", "title": "Booking Confirmed", "subtitle": "We found the perfect match for you", "time": "9:15 AM" },
+    { "key": "on_the_way", "title": "On the Way", "subtitle": "Marcus just left — 8 min away", "time": "Now" },
+    { "key": "arrived", "title": "Arrived", "subtitle": "Knock knock! Marcus is at your door", "time": null },
+    { "key": "in_progress", "title": "In Service", "subtitle": "Sit back and relax — magic in progress", "time": null }
+  ],
+  "statusInfo": {
+    "on_the_way": { "title": "On the Way!", "subtitle": "Marcus is heading your way" },
+    "arrived": { "title": "They're here!", "subtitle": "Marcus is at your door" },
+    "in_progress": { "title": "In Service", "subtitle": "The magic is happening" },
+    "completed": { "title": "All Done!", "subtitle": "Service is complete" },
+    "default": { "title": "Confirmed", "subtitle": "Waiting for technician assignment" }
+  },
+  "statusIndex": {
+    "pending": 0,
+    "confirmed": 0,
+    "on_the_way": 1,
+    "arrived": 2,
+    "in_progress": 3,
+    "completed": 3
+  },
+  "etaByStatus": {
+    "on_the_way": "8 min",
+    "arrived": "Now"
+  }
+}

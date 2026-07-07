@@ -1,0 +1,9 @@
+{
+  "categories": [
+    { "key": "cleaning", "label": "Cleaning", "icon": "sparkles", "color": "#FFE2EC" },
+    { "key": "repair", "label": "Repair", "icon": "construct", "color": "#FEF3C7" },
+    { "key": "electrical", "label": "Electrical", "icon": "flash", "color": "#D1FAE5" },
+    { "key": "beauty", "label": "Beauty", "icon": "flower", "color": "#FCE7F3" }
+  ],
+  "technicianFilters": ["all", "cleaning", "repair", "electrical"]
+}

@@ -11,16 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Message } from '../../types';
-
-function getMockSupportResponse(input: string): string {
-  const lower = input.toLowerCase();
-  if (lower.includes('gate') || lower.includes('code')) return "I've contacted the customer for the updated gate code. Please stand by.";
-  if (lower.includes('arrive') || lower.includes('here')) return "Thank you for letting us know. The customer has been notified of your arrival.";
-  if (lower.includes('cancel')) return "I can help with that. Would you like me to process a cancellation request?";
-  if (lower.includes('complete') || lower.includes('done')) return "Great! I'll mark this service as completed. Thank you for your excellent work!";
-  if (lower.includes('hello') || lower.includes('hi')) return "Hello! How can I assist you with this service order today?";
-  return "Thank you for your message. I'm looking into this and will have an update for you shortly.";
-}
+import { getMockSupportResponse, supportAgentName, supportResponseDelayMs } from '../../data';
 
 export default function SupportChat({ route, navigation }: any) {
   const { job } = route.params || {};
@@ -57,19 +48,19 @@ export default function SupportChat({ route, navigation }: any) {
       const supportMsg: Message = {
         id: `s${Date.now()}`,
         sender: 'support',
-        senderName: 'Sarah',
+        senderName: supportAgentName,
         content: getMockSupportResponse(text),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, supportMsg]);
-    }, 1500);
+    }, supportResponseDelayMs);
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
     if (item.sender === 'system') {
       return (
-        <View style={{ alignSelf: 'center', backgroundColor: '#f1f5f9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 6 }}>
-          <Text style={{ fontSize: 10, color: '#666', textAlign: 'center' }}>{item.content}</Text>
+        <View style={{ alignSelf: 'center', backgroundColor: '#F1F5F9', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, marginVertical: 6 }}>
+          <Text style={{ fontSize: 10, color: '#64748B', textAlign: 'center' }}>{item.content}</Text>
         </View>
       );
     }
@@ -78,25 +69,25 @@ export default function SupportChat({ route, navigation }: any) {
     return (
       <View style={{ flexDirection: 'row', justifyContent: isUser ? 'flex-end' : 'flex-start', marginVertical: 4, paddingHorizontal: 16 }}>
         {!isUser && (
-          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#003d9b', justifyContent: 'center', alignItems: 'center', marginRight: 8, marginTop: 4 }}>
-            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>S</Text>
+          <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#FF4F8B', justifyContent: 'center', alignItems: 'center', marginRight: 8, marginTop: 4 }}>
+            <Text style={{ color: '#fff', fontSize: 11, fontWeight: '700' }}>{supportAgentName[0]}</Text>
           </View>
         )}
         <View style={{ maxWidth: '75%' }}>
           <View style={{
-            backgroundColor: isUser ? '#003d9b' : '#fff',
+            backgroundColor: isUser ? '#FF4F8B' : '#F1F5F9',
             borderWidth: isUser ? 0 : 1,
-            borderColor: '#e0e2ec',
+            borderColor: '#F1F5F9',
             borderRadius: 14,
             borderTopRightRadius: isUser ? 4 : 14,
             borderTopLeftRadius: isUser ? 14 : 4,
             padding: 12,
           }}>
-            <Text style={{ fontSize: 13, color: isUser ? '#fff' : '#333', lineHeight: 18 }}>{item.content}</Text>
+            <Text style={{ fontSize: 13, color: isUser ? '#fff' : '#0F172A', lineHeight: 18 }}>{item.content}</Text>
           </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, paddingHorizontal: 4 }}>
-            <Text style={{ fontSize: 9, color: '#999' }}>{item.timestamp}</Text>
-            {isUser && <Ionicons name="checkmark-done" size={12} color="#003d9b" />}
+            <Text style={{ fontSize: 9, color: '#94A3B8' }}>{item.timestamp}</Text>
+            {isUser && <Ionicons name="checkmark-done" size={12} color="#FF4F8B" />}
           </View>
         </View>
       </View>
@@ -104,21 +95,21 @@ export default function SupportChat({ route, navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#f8fafc' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#FAFBFC' }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0e2ec' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' }}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 12 }}>
-          <Ionicons name="arrow-back" size={22} color="#333" />
+          <Ionicons name="arrow-back" size={22} color="#0F172A" />
         </TouchableOpacity>
-        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#003d9b', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
+        <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FF4F8B', justifyContent: 'center', alignItems: 'center', marginRight: 10 }}>
           <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>S</Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={{ fontSize: 14, fontWeight: '700', color: '#1a1a1a' }}>Sarah - Support</Text>
+          <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>{supportAgentName} - Support</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#22c55e' }} />
-            <Text style={{ fontSize: 10, color: '#22c55e', fontWeight: '600' }}>Online</Text>
+            <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' }} />
+            <Text style={{ fontSize: 10, color: '#10B981', fontWeight: '600' }}>Online</Text>
           </View>
         </View>
       </View>
@@ -134,21 +125,21 @@ export default function SupportChat({ route, navigation }: any) {
       />
 
       {/* Input */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, paddingBottom: 32, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e0e2ec', gap: 8 }}>
-        <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#f1f5f9', justifyContent: 'center', alignItems: 'center' }}>
-          <Ionicons name="add-circle-outline" size={20} color="#666" />
+      <View style={{ flexDirection: 'row', alignItems: 'center', padding: 12, paddingBottom: 32, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#F1F5F9', gap: 8 }}>
+        <TouchableOpacity style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }}>
+          <Ionicons name="add-circle-outline" size={20} color="#64748B" />
         </TouchableOpacity>
         <TextInput
           value={input}
           onChangeText={setInput}
           placeholder="Type a message..."
-          style={{ flex: 1, backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e0e2ec', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 13 }}
-          placeholderTextColor="#aaa"
+          style={{ flex: 1, backgroundColor: '#FAFBFC', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 10, fontSize: 13 }}
+          placeholderTextColor="#94A3B8"
         />
         <TouchableOpacity
           onPress={sendMessage}
           disabled={!input.trim()}
-          style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: input.trim() ? '#003d9b' : '#ccc', justifyContent: 'center', alignItems: 'center' }}
+          style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: input.trim() ? '#FF4F8B' : '#CBD5E1', justifyContent: 'center', alignItems: 'center' }}
         >
           <Ionicons name="send" size={16} color="#fff" />
         </TouchableOpacity>
