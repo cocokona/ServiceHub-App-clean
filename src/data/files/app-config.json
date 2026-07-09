@@ -1,6 +1,6 @@
 {
   "api": {
-    "defaultBaseUrl": "http://192.168.1.100:3000",
+    "defaultBaseUrl": "http://localhost:3000",
     "timeoutMs": 10000
   },
   "earnings": {

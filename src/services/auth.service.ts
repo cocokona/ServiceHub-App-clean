@@ -1,5 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { User } from '../types';
+import { logger } from './logger';
+import { ensureProfile } from './database.service';
 
 /**
  * Auth Service — Refactored
@@ -82,12 +84,16 @@ export async function signUp({
   });
 
   if (authError) {
+    logger.error('[auth:signUp] signup failed', { email: cleanEmail, code: (authError as any).status });
     return { user: null, error: authError.message };
   }
 
   if (!authData.user) {
+    logger.warn('[auth:signUp] no user returned');
     return { user: null, error: 'Registration failed — no user returned.' };
   }
+
+  logger.info('[auth:signUp] account created', { email: cleanEmail, hasSession: !!authData.session });
 
   // Step 2: If email confirmation is required, there is no session yet
   if (!authData.session) {
@@ -146,12 +152,16 @@ export async function signIn(
     });
 
   if (authError) {
+    logger.error('[auth:signIn] sign in failed', { email: cleanEmail, code: (authError as any).status });
     return { user: null, error: authError.message };
   }
 
   if (!authData.user) {
+    logger.warn('[auth:signIn] no user returned');
     return { user: null, error: 'Login failed — no user returned.' };
   }
+
+  logger.info('[auth:signIn] signed in', { email: cleanEmail });
 
   // Fetch the profile
   const { data: profile, error: profileError } = await supabase
@@ -179,6 +189,7 @@ export async function signIn(
  * Sign out and clear the local session.
  */
 export async function signOut(): Promise<void> {
+  logger.info('[auth:signOut] signing out');
   await supabase.auth.signOut();
 }
 
@@ -209,25 +220,38 @@ export async function refreshSession(): Promise<AuthResult> {
     return { user: null, error: error?.message ?? 'No active session' };
   }
 
+  // Self-heal: a missing profile must not force a logout. Ensure it exists,
+  // then read it back so the returned user is fully populated.
+  const profileReady = await ensureProfile();
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', session.user.id)
-    .single();
+    .maybeSingle();
 
-  if (!profile) {
-    return {
-      user: {
-        id: session.user.id,
-        email: session.user.email ?? '',
-        name: session.user.user_metadata?.name ?? '',
-        role: session.user.user_metadata?.role ?? 'customer',
-      },
-      error: null,
-    };
+  if (profile) {
+    return { user: mapToUser(profile), error: null };
   }
 
-  return { user: mapToUser(profile), error: null };
+  if (profileReady) {
+    // Profile was just created but not yet returned — retry once.
+    const { data: retry } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    if (retry) return { user: mapToUser(retry), error: null };
+  }
+
+  return {
+    user: {
+      id: session.user.id,
+      email: session.user.email ?? '',
+      name: session.user.user_metadata?.name ?? '',
+      role: session.user.user_metadata?.role ?? 'customer',
+    },
+    error: null,
+  };
 }
 
 /**
@@ -241,11 +265,16 @@ export async function getCurrentUser(): Promise<User | null> {
 
   if (!session?.user) return null;
 
+  // Self-heal: ensure the profile row exists before reading it. Without this,
+  // an account missing a profile would be reported as "no user" and logged out
+  // even though the auth session is perfectly valid.
+  await ensureProfile();
+
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', session.user.id)
-    .single();
+    .maybeSingle();
 
   if (!profile) return null;
 
@@ -283,8 +312,10 @@ export async function updateProfile(
     .single();
 
   if (error || !profile) {
+    logger.error('[auth:updateProfile] update failed', { code: (error as any)?.status });
     return { user: null, error: error?.message ?? 'Update failed' };
   }
 
+  logger.info('[auth:updateProfile] profile updated');
   return { user: mapToUser(profile), error: null };
 }

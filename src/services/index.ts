@@ -2,6 +2,12 @@
  * services/index.ts — 服务层统一导出
  */
 
+// 日志 & 错误处理
+export { logger, generateTraceId } from './logger';
+export type { LogLevel, LogEntry, LogSink, LogMeta } from './logger';
+export { logAndThrow, isForeignKeyViolation } from './errors';
+export type { DbErrorLike } from './errors';
+
 // 缓存
 export {
   getCacheConfig,

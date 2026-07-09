@@ -53,6 +53,7 @@ export interface SyncQueueItem {
   payload: unknown;
   createdAt: number;
   retries: number;
+  priority?: SyncPriority;
   lastError?: string;
 }
 

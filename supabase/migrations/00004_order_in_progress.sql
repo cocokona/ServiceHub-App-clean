@@ -159,3 +159,11 @@ BEGIN
     RETURN v_job_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- ============================================================================
+-- CRITICAL: Notify PostgREST to reload its schema cache.
+-- Without this, the auto-generated REST API (used by the Supabase JS client)
+-- will not recognize the new order_in_progress table and will throw:
+--   "Could not find the table public.order_in_progress in the schema cache"
+-- ============================================================================
+NOTIFY pgrst, 'reload schema';

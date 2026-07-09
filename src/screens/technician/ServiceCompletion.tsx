@@ -228,7 +228,7 @@ export default function ServiceCompletion({ route, navigation }: any) {
 
           {/* Send High Five pill button */}
           <TouchableOpacity
-            onPress={() => navigation.navigate('Jobs')}
+            onPress={() => navigation.navigate('TechnicianTabs', { screen: 'Jobs' })}
             activeOpacity={0.85}
             style={{
               backgroundColor: PINK,
@@ -253,7 +253,7 @@ export default function ServiceCompletion({ route, navigation }: any) {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => navigation.navigate('Jobs')}
+            onPress={() => navigation.navigate('TechnicianTabs', { screen: 'Jobs' })}
             style={{ alignItems: 'center', marginTop: 16, paddingVertical: 8 }}
           >
             <Text style={{ fontSize: 13, color: MUTED, fontWeight: '600' }}>

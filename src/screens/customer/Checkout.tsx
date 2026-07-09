@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,7 +13,7 @@ import { AppContext } from '../../navigation/AppNavigator';
 import { Job } from '../../types';
 import { paymentMethods, defaultChecklist, defaultTravelFee } from '../../data';
 import { PINK, PINK_SOFT, INK, MUTED, SUCCESS, SUCCESS_SOFT, CANVAS } from '../../theme/colors';
-import { createOrderInProgress } from '../../services/database.service';
+import { createOrderInProgress, ensureProfile } from '../../services/database.service';
 
 export default function Checkout({ route, navigation }: any) {
   const { bookingData } = route.params || {};
@@ -23,8 +24,31 @@ export default function Checkout({ route, navigation }: any) {
   const handlePay = async () => {
     setPaying(true);
     try {
+      // Validate user ID exists before proceeding
+      if (!user?.id) {
+        Alert.alert('Error', 'Please log in to continue with checkout.');
+        return;
+      }
+
+      // Validate that a real, active technician was assigned. The selection is
+      // captured as a profiles.id at ServiceDetails and must be present here so
+      // the order persists the correct technician reference (technician_id).
+      if (!bookingData?.technicianId) {
+        Alert.alert(
+          'Missing Technician',
+          'No technician is assigned to this order. Please go back and select a technician.'
+        );
+        return;
+      }
+
+      // Guarantee the user's profile row exists before writing the order.
+      // Accounts created before the signup trigger (or with a missing/soft-
+      // deleted profile) would otherwise fail the customer_id FK with a
+      // "profile not found" error. ensureProfile creates it on the fly.
+      await ensureProfile();
+
       const newJob = await createOrderInProgress({
-        customerId: user?.id || '',
+        customerId: user.id,
         serviceType: bookingData?.serviceType || 'Service',
         serviceCategory: bookingData?.serviceCategory || 'cleaning',
         customerName: user?.name || '',
@@ -45,6 +69,7 @@ export default function Checkout({ route, navigation }: any) {
         travelFee: defaultTravelFee,
         addOnsPrice: bookingData?.addOnsPrice || 0,
         totalPrice: bookingData?.totalPrice || 0,
+        technicianId: bookingData?.technicianId,
         technicianName: bookingData?.technicianName,
         technicianAvatar: bookingData?.technicianAvatar,
       });
@@ -53,8 +78,15 @@ export default function Checkout({ route, navigation }: any) {
         setJobs((prev: Job[]) => [newJob, ...prev]);
         navigation.navigate('Tracking', { job: newJob });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      const message = err?.message || 'An error occurred while processing your payment.';
+      // Show sign-out guidance if profile issue
+      const needsRelogin = message.toLowerCase().includes('profile') || message.toLowerCase().includes('sign out');
+      Alert.alert(
+        'Payment Failed',
+        needsRelogin ? `${message}\n\nPlease go to Profile > Sign Out, then sign in again.` : message
+      );
     } finally {
       setPaying(false);
     }

@@ -22,8 +22,8 @@ import ServiceCompletion from '../screens/technician/ServiceCompletion';
 import { User, Job } from '../types';
 import { initialJobs, storageKeys } from '../data';
 import { PINK, PLACEHOLDER } from '../theme/colors';
-import { apiGet, apiPost, apiPut } from '../api/client';
-import { fetchJobsByCustomer, fetchJobsByTechnician, fetchOrdersInProgress } from '../services/database.service';
+import { fetchJobsByCustomer, fetchJobsByTechnician, fetchOrdersInProgress, updateJobStatus as persistJobStatus, ensureProfile } from '../services/database.service';
+import { logger } from '../services/logger';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -126,25 +126,34 @@ export default function AppNavigator() {
 
       // Combine: pending orders first, then active jobs
       setJobs([...pendingOrders, ...dbJobs]);
-    } catch {
-      // Fallback to mock data if Supabase is unavailable
-      try {
-        const data = await apiGet('/api/jobs');
-        if (Array.isArray(data)) setJobs(data);
-      } catch {}
+    } catch (err) {
+      // Supabase unavailable: keep the current jobs list and record the
+      // failure. The previous implementation silently fell back to a
+      // non-existent REST endpoint — that dead path is removed, and the
+      // observable UI behavior (jobs list unchanged) is preserved.
+      logger.warn('[AppNavigator] refreshJobs failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }, [user]);
 
-  // Fetch jobs from Supabase when user is loaded
+  // When a user session is established, guarantee their profile row exists.
+  // Accounts missing a profiles record (created before the signup trigger)
+  // would otherwise fail every FK-dependent write. This runs once per session
+  // and is idempotent, so it is safe on every user change.
   useEffect(() => {
-    if (user) refreshJobs();
+    if (!user) return;
+    ensureProfile().finally(() => refreshJobs());
   }, [user, refreshJobs]);
 
   const updateJobStatus = useCallback((jobId: string, updates: Partial<Job>) => {
     setJobs((prev) =>
       prev.map((j) => (j.id === jobId ? { ...j, ...updates } : j))
     );
-    apiPut(`/api/jobs/${jobId}`, updates).catch(() => {});
+    // Persist to Supabase (replaces the old dead REST call). Fire-and-forget
+    // to match the previous non-blocking behavior; local state is already
+    // optimistic, so a delayed failure does not roll back the UI here.
+    persistJobStatus(jobId, updates).catch(() => {});
   }, []);
 
   const logout = useCallback(() => {

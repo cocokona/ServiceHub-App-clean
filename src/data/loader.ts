@@ -478,7 +478,10 @@ export const appConfig = safeGet<{
   storageKeys: { user: 'sh_user' },
 });
 
-export const apiBaseUrl: string = appConfig.api.defaultBaseUrl;
+// Environment variable takes precedence over JSON config so that deployment
+// environments (CI, staging, production) can override without modifying files.
+export const apiBaseUrl: string =
+  process.env.EXPO_PUBLIC_API_BASE_URL || appConfig.api.defaultBaseUrl;
 export const apiTimeoutMs: number = appConfig.api.timeoutMs;
 export const technicianSharePercent: number =
   appConfig.earnings.technicianSharePercent;

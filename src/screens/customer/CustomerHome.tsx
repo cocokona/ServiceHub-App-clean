@@ -17,7 +17,6 @@ import { AppContext } from '../../navigation/AppNavigator';
 import { getImageUrl, categories, recommendedTechnicians, mockNotifications, cities, defaultLocation, getStatusColor, categoryConfig } from '../../data';
 import { PINK, PINK_SOFT, INK, MUTED, ACCENT, ACCENT_SOFT, CANVAS } from '../../theme/colors';
 import { Technician, Job } from '../../types';
-import { apiGet } from '../../api/client';
 import { updateProfile } from '../../services/auth.service';
 import { fetchTechnicians } from '../../services/database.service';
 
@@ -42,7 +41,9 @@ export default memo(function CustomerHome({ route, navigation }: any) {
   useEffect(() => {
     fetchTechnicians().then((data) => {
       setTechnicians(data);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.error('Failed to fetch technicians:', err);
+    });
   }, []);
 
   const onRefresh = async () => {
@@ -412,8 +413,8 @@ export default memo(function CustomerHome({ route, navigation }: any) {
       <View style={{ flexDirection: 'row', paddingHorizontal: 16, gap: 12 }}>
         {(technicians.length > 0 ? technicians : recommendedTechnicians).slice(0, 2).map((tech, i) => (
           <TouchableOpacity
-            key={i}
-            onPress={() => startBooking('cleaning', tech)}
+            key={tech.id || i}
+            onPress={() => startBooking(tech.specialty || 'cleaning', tech)}
             style={{
               flex: 1,
               backgroundColor: '#fff',

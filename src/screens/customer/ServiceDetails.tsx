@@ -6,13 +6,15 @@ import {
   TouchableOpacity,
   Image,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Job } from '../../types';
-import { apiGet } from '../../api/client';
 import { durations, categoryConfig, durationUnitCost } from '../../data';
 import type { CategoryFieldConfig, FocusArea } from '../../data';
+import { fetchTechnicians } from '../../services/database.service';
 
 interface TechProfile {
   id: string;
@@ -42,10 +44,11 @@ const fallbackConfig: CategoryFieldConfig = {
 };
 
 export default function ServiceDetails({ route, navigation }: any) {
-  const { category, preferredTech } = route.params || {};
+  const { category, technician: preferredTech } = route.params || {};
   const config: CategoryFieldConfig = categoryConfig[category] || fallbackConfig;
 
   const [helpers, setHelpers] = useState<TechProfile[]>([]);
+  const [loadingTech, setLoadingTech] = useState(true);
   const [selectedTech, setSelectedTech] = useState<TechProfile | null>(preferredTech || null);
   const [selectedField, setSelectedField] = useState(config.fieldOptions[1] || config.fieldOptions[0] || '');
   const [selectedDuration, setSelectedDuration] = useState(durations[0] || 2);
@@ -55,27 +58,45 @@ export default function ServiceDetails({ route, navigation }: any) {
   );
 
   useEffect(() => {
-    apiGet(`/api/technicians?category=${category}`).then((data) => {
-      if (Array.isArray(data)) {
-        setHelpers(data.map((t: any) => ({
-          id: t.id,
-          name: t.name,
-          avatar: t.avatar || '',
-          specialty: t.specialty || t.workCategory,
-          workCategory: t.workCategory || 'all',
-          rating: t.rating || 0,
-          reviewsCount: t.reviewsCount || 0,
-          ratePerHour: t.ratePerHour || 45,
-        })));
-      }
-    }).catch(() => {});
+    let active = true;
+    setLoadingTech(true);
+    fetchTechnicians(category)
+      .then((data) => {
+        if (!active) return;
+        setHelpers(
+          data.map((t) => ({
+            id: t.id || '',
+            name: t.name,
+            avatar: t.avatar || '',
+            specialty: t.specialty || 'all',
+            workCategory: t.specialty || 'all',
+            rating: t.rating || 0,
+            reviewsCount: t.reviewsCount || 0,
+            ratePerHour: t.ratePerHour || 45,
+          }))
+        );
+      })
+      .catch((err) => {
+        console.error('Failed to fetch technicians:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingTech(false);
+      });
+    return () => {
+      active = false;
+    };
   }, [category]);
 
   useEffect(() => {
-    if (helpers.length > 0 && preferredTech) {
-      const match = helpers.find((h) => h.name === preferredTech.name);
-      if (match) setSelectedTech(match);
-    }
+    if (helpers.length === 0 || !preferredTech) return;
+    // A preselected technician (e.g. tapped from "Recommended") is only valid
+    // if it actually exists in the active, DB-backed list for this category.
+    // Match by ID first, then by name; if it doesn't resolve, clear the stale
+    // selection so the customer picks a real, selectable technician.
+    const match =
+      helpers.find((h) => h.id === preferredTech.id) ||
+      helpers.find((h) => h.name === preferredTech.name);
+    setSelectedTech(match || null);
   }, [helpers, preferredTech]);
 
   const baseRate = config.baseRatesByField[selectedField] ?? 0;
@@ -90,6 +111,19 @@ export default function ServiceDetails({ route, navigation }: any) {
   };
 
   const handleNext = () => {
+    // Validate: a customer must assign a real, active technician before the
+    // order can be saved. selectedTech is only ever set from the DB-backed
+    // `helpers` list, so its id is a valid profiles.id reference.
+    if (!selectedTech || !selectedTech.id) {
+      Alert.alert(
+        'Select a Technician',
+        helpers.length === 0
+          ? 'No technicians are available for this service right now. Please try a different service or check back later.'
+          : 'Please choose a technician before continuing.'
+      );
+      return;
+    }
+
     const bookingData: Partial<Job> = {
       serviceType: config.title,
       serviceCategory: category,
@@ -100,8 +134,9 @@ export default function ServiceDetails({ route, navigation }: any) {
       baseRate,
       addOnsPrice,
       totalPrice,
-      technicianName: selectedTech?.name,
-      technicianAvatar: selectedTech?.avatar,
+      technicianId: selectedTech.id,
+      technicianName: selectedTech.name,
+      technicianAvatar: selectedTech.avatar,
     };
     navigation.navigate('ScheduleDetails', { bookingData });
   };
@@ -207,48 +242,64 @@ export default function ServiceDetails({ route, navigation }: any) {
 
         {/* Technician Selection */}
         <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 10 }}>Select Technician</Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
-          {helpers.map((tech) => (
-            <TouchableOpacity
-              key={tech.id}
-              onPress={() => setSelectedTech(tech)}
-              style={{
-                width: '47%',
-                padding: 12,
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: selectedTech?.id === tech.id ? '#FF4F8B' : '#F1F5F9',
-                backgroundColor: selectedTech?.id === tech.id ? 'rgba(255,79,139,0.05)' : '#FFFFFF',
-                alignItems: 'center',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 2 },
-                shadowOpacity: 0.06,
-                shadowRadius: 8,
-                elevation: 2,
-              }}
-            >
-              {tech.avatar ? (
-                <Image source={{ uri: tech.avatar }} style={{ width: 40, height: 40, borderRadius: 20, marginBottom: 8 }} />
-              ) : (
-                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFE2EC', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#FF4F8B' }}>{tech.name[0]}</Text>
+        {loadingTech ? (
+          <View style={{ paddingVertical: 24, alignItems: 'center' }}>
+            <ActivityIndicator size="small" color="#FF4F8B" />
+            <Text style={{ fontSize: 12, color: '#94A3B8', marginTop: 8 }}>Loading technicians…</Text>
+          </View>
+        ) : helpers.length === 0 ? (
+          <View style={{ paddingVertical: 20, paddingHorizontal: 16, borderRadius: 16, backgroundColor: '#FFF1F6', borderWidth: 1, borderColor: '#FCE7F3', marginBottom: 24 }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: '#E03572', textAlign: 'center' }}>
+              No technicians available for this service right now.
+            </Text>
+            <Text style={{ fontSize: 11, color: '#94A3B8', textAlign: 'center', marginTop: 4 }}>
+              Please try a different service category or check back later.
+            </Text>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
+            {helpers.map((tech) => (
+              <TouchableOpacity
+                key={tech.id}
+                onPress={() => setSelectedTech(tech)}
+                style={{
+                  width: '47%',
+                  padding: 12,
+                  borderRadius: 16,
+                  borderWidth: 1,
+                  borderColor: selectedTech?.id === tech.id ? '#FF4F8B' : '#F1F5F9',
+                  backgroundColor: selectedTech?.id === tech.id ? 'rgba(255,79,139,0.05)' : '#FFFFFF',
+                  alignItems: 'center',
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.06,
+                  shadowRadius: 8,
+                  elevation: 2,
+                }}
+              >
+                {tech.avatar ? (
+                  <Image source={{ uri: tech.avatar }} style={{ width: 40, height: 40, borderRadius: 20, marginBottom: 8 }} />
+                ) : (
+                  <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: '#FFE2EC', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '700', color: '#FF4F8B' }}>{tech.name[0]}</Text>
+                  </View>
+                )}
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#333', textAlign: 'center' }}>{tech.name}</Text>
+                <Text style={{ fontSize: 10, color: '#64748B', textAlign: 'center' }}>{tech.specialty}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4 }}>
+                  <Ionicons name="star" size={10} color="#F59E0B" />
+                  <Text style={{ fontSize: 10, fontWeight: '600' }}>{tech.rating}</Text>
                 </View>
-              )}
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#333', textAlign: 'center' }}>{tech.name}</Text>
-              <Text style={{ fontSize: 10, color: '#64748B', textAlign: 'center' }}>{tech.specialty}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 4 }}>
-                <Ionicons name="star" size={10} color="#F59E0B" />
-                <Text style={{ fontSize: 10, fontWeight: '600' }}>{tech.rating}</Text>
-              </View>
-              <Text style={{ fontSize: 11, fontWeight: '700', color: '#FF4F8B', marginTop: 2 }}>${tech.ratePerHour}/hr</Text>
-              {selectedTech?.id === tech.id && (
-                <View style={{ position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: '#FF4F8B', justifyContent: 'center', alignItems: 'center' }}>
-                  <Ionicons name="checkmark" size={12} color="#fff" />
-                </View>
-              )}
-            </TouchableOpacity>
-          ))}
-        </View>
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#FF4F8B', marginTop: 2 }}>${tech.ratePerHour}/hr</Text>
+                {selectedTech?.id === tech.id && (
+                  <View style={{ position: 'absolute', top: 6, right: 6, width: 20, height: 20, borderRadius: 10, backgroundColor: '#FF4F8B', justifyContent: 'center', alignItems: 'center' }}>
+                    <Ionicons name="checkmark" size={12} color="#fff" />
+                  </View>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* Bottom Bar */}

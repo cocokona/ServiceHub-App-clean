@@ -1,16 +1,90 @@
 import { supabase } from '../lib/supabase';
 import type { Job, Technician } from '../types';
+import { logger } from './logger';
+import { logAndThrow, isForeignKeyViolation } from './errors';
 
 /**
  * Database Service — Centralized Data Access Layer
  *
  * Replaces the old dual-data-source pattern (Supabase direct queries +
- * phantom REST API at 192.168.1.100:3000). All data access now goes through
+ * phantom REST API at 192.168.1.100:3000). All data access goes through
  * Supabase with RLS-protected queries.
  *
- * Each method includes typed responses and proper error handling.
- * The caller decides how to handle errors — no silent swallowing.
+ * Reliability notes (refactor):
+ * - Every failure is routed through `logAndThrow`, which preserves the exact
+ *   thrown `Error` message contract while adding structured, traceable logs.
+ * - `createOrderInProgress` is now a single atomic INSERT. The
+ *   `order_in_progress.customer_id` FK to `profiles` enforces referential
+ *   integrity at the database level; a missing profile surfaces a friendly
+ *   message (SQLSTATE 23503) instead of us doing a separate read-then-write
+ *   round trip that could race.
  */
+
+// ---------------------------------------------------------------------------
+// Profiles
+// ---------------------------------------------------------------------------
+
+/**
+ * Ensure a `profiles` row exists for the current authenticated user.
+ *
+ * Why this exists: `order_in_progress`, `jobs`, and `messages` all have a
+ * foreign key to `profiles(id)`. If a user authenticates but their profile row
+ * is missing (account predates the signup trigger, profile was soft-deleted,
+ * or a signup race), any write fails with a 23503 FK violation — which is the
+ * "Your profile was not found" error surfaced at checkout.
+ *
+ * This recovers gracefully by creating the profile from the auth user's
+ * metadata. It is idempotent (SELECT first, INSERT only if absent) and cheap,
+ * so it is safe to call on every session and before any profile-dependent
+ * write. The RLS policy `profiles_insert_self` (id = auth.uid()) permits the
+ * authenticated user to insert their own row.
+ *
+ * @returns true if a profile exists (or was just created), false if there is
+ *          no active session to anchor it to.
+ */
+export async function ensureProfile(): Promise<boolean> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) return false;
+
+  const userId = session.user.id;
+
+  // Fast path: profile already present.
+  const { data: existing } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (existing) return true;
+
+  // Recover: create the missing profile from auth metadata.
+  const meta = session.user.user_metadata || {};
+  const email = session.user.email ?? '';
+  const { error } = await supabase.from('profiles').insert({
+    id: userId,
+    email,
+    name: (typeof meta.name === 'string' && meta.name) || email.split('@')[0] || 'User',
+    role: meta.role === 'technician' ? 'technician' : 'customer',
+    work_category: meta.work_category ?? null,
+  });
+
+  if (error) {
+    // A concurrent insert (race) or policy issue — log but don't crash the
+    // calling flow; the downstream write will surface a clear error if it
+    // still can't proceed.
+    logger.warn('[ensureProfile] failed to create missing profile', {
+      code: (error as any)?.code,
+      message: error.message,
+    });
+    return false;
+  }
+
+  logger.info('[ensureProfile] created missing profile for user', { userId });
+  return true;
+}
 
 // ---------------------------------------------------------------------------
 // Jobs
@@ -30,7 +104,7 @@ export async function fetchJobsByCustomer(customerId: string): Promise<Job[]> {
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('fetchJobsByCustomer', error);
   return (data || []).map(mapDbJobToAppJob);
 }
 
@@ -50,7 +124,7 @@ export async function fetchJobsByTechnician(
     .is('deleted_at', null)
     .order('created_at', { ascending: false });
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('fetchJobsByTechnician', error);
   return (data || []).map(mapDbJobToAppJob);
 }
 
@@ -86,13 +160,14 @@ export async function createJob(
       travel_fee: job.travelFee || 0,
       add_ons_price: job.addOnsPrice || 0,
       total_price: job.totalPrice || 0,
+      technician_id: job.technicianId || null,
       technician_name: job.technicianName,
       technician_avatar: job.technicianAvatar,
     })
     .select('*')
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('createJob', error);
   return data ? mapDbJobToAppJob(data) : null;
 }
 
@@ -124,7 +199,7 @@ export async function updateJobStatus(
     .update(dbUpdates)
     .eq('id', jobId);
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('updateJobStatus', error);
 }
 
 // ---------------------------------------------------------------------------
@@ -138,9 +213,11 @@ export async function fetchTechnicians(
     .from('profiles')
     .select('id, name, avatar_url, rating, reviews_count, work_category, hourly_rate, bio')
     .eq('role', 'technician')
+    .eq('is_active', true)
     .is('deleted_at', null);
 
   if (category && category !== 'all') {
+    // Filter by work_category matching the category OR 'all' (universal technicians)
     query = query.or(
       `work_category.eq.${category},work_category.eq.all`
     );
@@ -148,9 +225,10 @@ export async function fetchTechnicians(
 
   const { data, error } = await query;
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('fetchTechnicians', error);
 
   return (data || []).map((t: any) => ({
+    id: t.id,
     name: t.name,
     avatar: t.avatar_url || '',
     rating: t.rating || 0,
@@ -166,6 +244,13 @@ export async function fetchTechnicians(
 
 /**
  * Create a new order in the order_in_progress table.
+ *
+ * Atomic by construction: a single INSERT. The `customer_id` foreign key to
+ * `profiles` guarantees referential integrity — if the customer profile does
+ * not exist, Postgres rejects the insert with SQLSTATE 23503 and we translate
+ * that into the same friendly message the old read-then-write flow produced.
+ * This removes a redundant round trip and the race window it introduced.
+ *
  * Returns the created order mapped to the app's Job type.
  */
 export async function createOrderInProgress(
@@ -199,13 +284,61 @@ export async function createOrderInProgress(
       travel_fee: order.travelFee || 0,
       add_ons_price: order.addOnsPrice || 0,
       total_price: order.totalPrice || 0,
+      technician_id: order.technicianId || null,
       technician_name: order.technicianName,
       technician_avatar: order.technicianAvatar,
     })
     .select('*')
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (isForeignKeyViolation(error)) {
+      // The customer profile is missing for this auth user. Recover by
+      // creating it, then retry the insert once. This turns the old
+      // show-stopping "sign out and sign in again" error into a transparent
+      // self-heal for accounts that predate the signup trigger.
+      const recovered = await ensureProfile();
+      if (recovered) {
+        const { data: retryData, error: retryError } = await supabase
+          .from('order_in_progress')
+          .insert({
+            customer_id: order.customerId,
+            service_type: order.serviceType,
+            service_category: order.serviceCategory,
+            customer_name: order.customerName,
+            customer_phone: order.customerPhone,
+            customer_avatar: order.customerAvatar,
+            address: order.address,
+            apartment: order.apartment,
+            city: order.city,
+            zip_code: order.zipCode,
+            scheduled_date: order.date,
+            time_slot: order.timeSlot,
+            rooms: order.rooms,
+            duration: order.duration,
+            focus_areas: order.focusAreas || [],
+            notes: order.notes,
+            base_rate: order.baseRate || 0,
+            tax: order.tax || 0,
+            travel_fee: order.travelFee || 0,
+            add_ons_price: order.addOnsPrice || 0,
+            total_price: order.totalPrice || 0,
+            technician_id: order.technicianId || null,
+            technician_name: order.technicianName,
+            technician_avatar: order.technicianAvatar,
+          })
+          .select('*')
+          .single();
+
+        if (!retryError && retryData) return mapDbOrderToAppJob(retryData);
+      }
+      throw new Error(
+        'Your profile was not found. Please sign out and sign in again.'
+      );
+    }
+    logAndThrow('createOrderInProgress', error);
+  }
+
   return data ? mapDbOrderToAppJob(data) : null;
 }
 
@@ -219,7 +352,7 @@ export async function fetchOrdersInProgress(customerId: string): Promise<Job[]> 
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false });
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('fetchOrdersInProgress', error);
   return (data || []).map(mapDbOrderToAppJob);
 }
 
@@ -239,14 +372,15 @@ export async function fetchAllOrdersInProgress(category?: string): Promise<Job[]
 
   const { data, error } = await query;
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('fetchAllOrdersInProgress', error);
   return (data || []).map(mapDbOrderToAppJob);
 }
 
 /**
  * Technician accepts an order_in_progress.
- * Calls the DB function which moves the row to jobs and deletes from order_in_progress.
- * Returns the new job ID.
+ * Calls the DB function which moves the row to jobs and deletes from
+ * order_in_progress inside a single transaction (atomic). Returns the new job
+ * ID.
  */
 export async function acceptOrderInProgress(
   orderId: string,
@@ -257,7 +391,7 @@ export async function acceptOrderInProgress(
     p_technician_id: technicianId,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('acceptOrderInProgress', error);
   return data as string | null;
 }
 
@@ -290,6 +424,7 @@ function mapDbOrderToAppJob(row: any): Job {
     checklist: [],
     technicianName: row.technician_name,
     technicianAvatar: row.technician_avatar,
+    technicianId: row.technician_id,
   };
 }
 
@@ -304,7 +439,7 @@ export async function fetchMessages(jobId: string) {
     .eq('job_id', jobId)
     .order('created_at', { ascending: true });
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('fetchMessages', error);
   return data || [];
 }
 
@@ -329,7 +464,7 @@ export async function sendMessage(
     .select('*')
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('sendMessage', error);
   return data;
 }
 
@@ -381,7 +516,7 @@ export async function fetchTechnicianAvailability(
     .select('day_of_week, time_slot, is_available')
     .eq('technician_id', technicianId);
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('fetchTechnicianAvailability', error);
 
   const map: Record<string, boolean> = {};
   (data || []).forEach((row: any) => {
@@ -412,7 +547,7 @@ export async function setTechnicianAvailability(
       { onConflict: 'technician_id,day_of_week,time_slot' }
     );
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('setTechnicianAvailability', error);
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +581,11 @@ export async function fetchServiceCategories(): Promise<ServiceCategory[]> {
       .eq('is_active', true);
 
     if (error || !data || data.length === 0) {
+      if (error) {
+        logger.warn('[fetchServiceCategories] query failed, using fallback', {
+          code: (error as any).code,
+        });
+      }
       return DEFAULT_SERVICE_CATEGORIES;
     }
 
@@ -456,7 +596,10 @@ export async function fetchServiceCategories(): Promise<ServiceCategory[]> {
     );
 
     return known.length > 0 ? known : DEFAULT_SERVICE_CATEGORIES;
-  } catch {
+  } catch (err) {
+    logger.warn('[fetchServiceCategories] unexpected error, using fallback', {
+      error: err instanceof Error ? err.message : String(err),
+    });
     return DEFAULT_SERVICE_CATEGORIES;
   }
 }
@@ -480,7 +623,7 @@ export async function createReview(
     comment,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) logAndThrow('createReview', error);
   // The trg_reviews_update_rating trigger auto-updates the technician's
   // aggregate rating and review count — no manual sync needed.
 }
@@ -531,5 +674,6 @@ function mapDbJobToAppJob(row: any): Job {
     reportedIssueUrgent: row.reported_issue_urgent,
     technicianName: row.technician_name,
     technicianAvatar: row.technician_avatar,
+    technicianId: row.technician_id,
   };
 }

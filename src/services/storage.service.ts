@@ -16,6 +16,7 @@ import {
   STORAGE_LIMITS,
   isCacheExpired,
 } from './cacheConfig';
+import { logger } from './logger';
 
 // ---------------------------------------------------------------------------
 // 存储键前缀
@@ -80,6 +81,7 @@ async function loadMeta(): Promise<StorageMeta> {
     }
   } catch {
     // 元数据损坏，重建
+    logger.debug('[storage] meta corrupted, rebuilding');
   }
   return createDefaultMeta();
 }
@@ -177,6 +179,7 @@ export async function getCacheEntry<T>(
     return entry;
   } catch {
     // 数据损坏
+    logger.warn('[storage] cache entry unreadable, removing', { key: config.key });
     await removeCacheEntry(config.key);
     return null;
   }
@@ -246,6 +249,7 @@ async function evictEntries(meta: StorageMeta, neededSize: number): Promise<void
       meta.estimatedTotalSize -= entrySize;
     } catch {
       // 单个条目淘汰失败，继续下一个
+      logger.debug('[storage] evict failed for entry, skipping', { storageKey });
     }
   }
 
@@ -311,6 +315,7 @@ export async function cleanExpiredCache(): Promise<number> {
       }
     } catch {
       // 损坏数据直接清除
+      logger.debug('[storage] corrupt entry removed during cleanup', { storageKey });
       await AsyncStorage.removeItem(storageKey);
       lruTracker.remove(storageKey);
       cleaned++;

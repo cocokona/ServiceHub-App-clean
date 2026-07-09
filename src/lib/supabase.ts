@@ -1,31 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabaseUrl, supabaseAnonKey } from '../config/env';
 
 /**
  * Supabase Client — Refactored
  *
- * Key changes from the original:
- * 1. Config is read from environment variables (not hardcoded)
- * 2. AsyncStorage is wired as the persistent session store
- * 3. Auto-refresh tokens enabled for seamless session management
- * 4. Schema cache is explicitly set to 'public'
+ * Connection credentials (URL + anon key) are read from the centralized
+ * environment config at src/config/env.ts. No hardcoded values here.
  *
  * SECURITY: The anon key is safe to expose in client code — it only grants
  * access permitted by Row Level Security policies. Never expose the
  * service_role key in the app.
  */
 
-// In Expo, env vars prefixed with EXPO_PUBLIC_ are bundled at build time.
-// For local dev without env vars, fall back to the existing project config.
-const SUPABASE_URL =
-  process.env.EXPO_PUBLIC_SUPABASE_URL ||
-  'https://dusugfdsuzeutjnkhtug.supabase.co';
-
-const SUPABASE_ANON_KEY =
-  process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ||
-  '***REMOVED_ANON_KEY***';
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     // Persist the JWT session on the device so users stay logged in
     storage: AsyncStorage,

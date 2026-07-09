@@ -21,7 +21,9 @@ import {
   putCacheEntries,
   getCacheEntries,
   checkStorageThreshold,
+  clearAllCache,
 } from './storage.service';
+import { logger } from './logger';
 
 // ---------------------------------------------------------------------------
 // L1 内存缓存
@@ -127,7 +129,12 @@ export async function cacheRead<T>(
       // 异步后台刷新，不阻塞返回
       fetchFromRemote()
         .then((fresh) => cacheWrite(key, fresh, config))
-        .catch(() => {});
+        .catch((e) =>
+          logger.debug('[cache] background refresh failed (memory)', {
+            key,
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        );
     }
     return { data: memData, source: 'memory' };
   }
@@ -142,7 +149,12 @@ export async function cacheRead<T>(
     if (isCacheStale(storageEntry) && options?.backgroundRefresh !== false) {
       fetchFromRemote()
         .then((fresh) => cacheWrite(key, fresh, config))
-        .catch(() => {});
+        .catch((e) =>
+          logger.debug('[cache] background refresh failed (storage)', {
+            key,
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        );
     }
 
     return { data: storageEntry.data, source: 'storage' };
@@ -212,6 +224,5 @@ export async function cacheReadList<T>(
  */
 export async function cacheClearAll(): Promise<void> {
   memoryCache.clear();
-  const { clearAllCache } = await import('./storage.service');
   await clearAllCache();
 }

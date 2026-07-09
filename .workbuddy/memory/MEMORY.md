@@ -23,6 +23,8 @@
 - 所有表启用 RLS，按 auth.uid() 做行级隔离
 - 前端数据访问统一通过 src/services/ 层，不直接在组件中写 Supabase 查询
 - SQL 迁移文件放 supabase/migrations/，序号前缀
+- 统一日志走 `src/services/logger`；统一数据库错误走 `src/services/errors` 的 `logAndThrow`（保持对外 `Error.message` 契约不变）；重构服务层时不得改变既有导出函数的签名/返回/抛出 message
+- 单测用 Vitest（`npm test`，配置 `vitest.config.ts` + `vitest.setup.ts`），测试放 `src/**/*.test.ts`，AsyncStorage 与 `lib/supabase` 在 setup 中全局 mock
 
 ## 2026-07-06 离线同步系统
 - 基于 OFFLINE_SYNC_DESIGN.md 构建完整离线缓存+同步系统
@@ -42,3 +44,16 @@
 - cacheConfig.ts / syncConfig.ts 直接 import JSON（服务层配置）
 - 修复 nativewind-env.d.ts（添加 `declare module '*.css'`）
 - tsc --noEmit 零错误通过
+
+## 2026-07-08 order_in_progress 表找不到 + 配置集中化
+- **根因**: 迁移 00004 缺少 `NOTIFY pgrst, 'reload schema'`，PostgREST schema cache 未刷新
+- **修复**: 迁移末尾添加 NOTIFY；新建 `src/config/env.ts` 集中管理环境变量；`.env`/`.env.example` 文件；supabase.ts 移除硬编码凭据；app-config.json 修正幻影 IP
+- **验证**: 10 张表名全部一致；tsc --noEmit 零错误
+- **约定**: 所有连接信息走 `EXPO_PUBLIC_*` 环境变量，通过 `src/config/env.ts` 统一读取，禁止硬编码
+
+## 2026-07-09 服务层可靠性重构
+- 新增 `logger.ts`/`errors.ts`；删除幻影 REST 客户端 `src/api/client.ts`，`AppNavigator`/`CustomerHome` 改用 Supabase 服务层
+- `createOrderInProgress` 改单条原子 INSERT（依赖 FK，23503→友好消息）
+- 修复 bug：`enqueueSyncOperation` 优先级被忽略；`flushSyncQueue` 重试耗尽未出队
+- 引入 Vitest，`src/services/__tests__/*.test.ts` 44 用例全过，`tsc --noEmit` 零错误
+- 详见 `BACKEND_REFACTOR.md`

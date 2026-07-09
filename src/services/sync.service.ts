@@ -26,6 +26,7 @@ import {
   flushSyncQueue,
   getSyncQueueStats,
 } from './syncQueue.service';
+import { logger } from './logger';
 
 // ---------------------------------------------------------------------------
 // 同步状态类型
@@ -178,7 +179,7 @@ async function incrementalPull<T extends { updated_at?: string; created_at?: str
   const { data, error } = await query;
 
   if (error) {
-    console.warn(`[sync] incrementalPull failed for ${tableName}:`, error.message);
+    logger.warn('[sync] incrementalPull failed', { tableName, message: error.message });
     return [];
   }
 
@@ -214,7 +215,7 @@ async function fullPull<T>(
   const { data, error } = await query;
 
   if (error) {
-    console.warn(`[sync] fullPull failed for ${tableName}:`, error.message);
+    logger.warn('[sync] fullPull failed', { tableName, message: error.message });
     return [];
   }
 

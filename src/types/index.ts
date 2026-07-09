@@ -50,6 +50,7 @@ export interface Job {
   reportedIssueUrgent?: boolean;
   technicianName?: string;
   technicianAvatar?: string;
+  technicianId?: string;
   completedAt?: string;
 }
 
@@ -63,6 +64,7 @@ export interface Message {
 }
 
 export interface Technician {
+  id?: string;
   name: string;
   avatar: string;
   rating: number;

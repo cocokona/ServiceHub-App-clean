@@ -16,6 +16,7 @@ import {
   DEFAULT_RETRY_CONFIG,
   SyncPriority,
 } from './syncConfig';
+import { logger } from './logger';
 
 // ---------------------------------------------------------------------------
 // 队列持久化
@@ -35,6 +36,7 @@ export async function loadSyncQueue(): Promise<SyncQueueItem[]> {
     }
   } catch {
     // 队列数据损坏，重置
+    logger.warn('[syncQueue] queue data corrupted, resetting');
     await AsyncStorage.removeItem(SYNC_QUEUE_KEY);
   }
   return [];
@@ -79,22 +81,23 @@ export async function enqueueSyncOperation(
     payload,
     createdAt: Date.now(),
     retries: 0,
+    priority,
   };
 
   items.push(newItem);
 
-  // 按优先级排序：high > normal > low
+  // 按优先级排序：high > normal > low（同优先级按入队时间）
   const priorityOrder: Record<SyncPriority, number> = {
     high: 0,
     normal: 1,
     low: 2,
   };
 
-  items.sort(
-    (a, b) =>
-      priorityOrder[priority] - priorityOrder[priority] ||
-      a.createdAt - b.createdAt,
-  );
+  items.sort((a, b) => {
+    const pa = priorityOrder[a.priority ?? 'normal'];
+    const pb = priorityOrder[b.priority ?? 'normal'];
+    return pa - pb || a.createdAt - b.createdAt;
+  });
 
   await saveSyncQueue(items);
   return newItem.id;
@@ -233,14 +236,23 @@ export async function flushSyncQueue(
             );
           }
         } else {
+          // Retries exhausted (delay < 0): final failure — remove the item so
+          // it is not retried forever and does not leak in the queue.
+          await dequeueSyncOperation(item.id);
           failed++;
-          errors.push(`[${item.key}] ${item.operation}: ${result.error}`);
+          errors.push(`[${item.key}] ${item.operation}: ${result.error} (放弃重试)`);
         }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       failed++;
       errors.push(`[${item.key}] ${item.operation}: ${message}`);
+
+      logger.error('[syncQueue] executor crashed', {
+        key: item.key,
+        operation: item.operation,
+        error: message,
+      });
 
       // 递增重试
       await incrementRetry(item.id);
