@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useContext } from 'react';
 import {
   View,
   Text,
@@ -6,38 +6,77 @@ import {
   TouchableOpacity,
   TextInput,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { timeSlots, currentLocationDemo, categoryConfig } from '../../data';
+import { AppContext } from '../../navigation/AppNavigator';
+import {
+  ADDRESS_FIELDS,
+  emptyAddressFields,
+  validateAddressFields,
+  profileToAddressFields,
+  type AddressFields,
+} from '../../services/address';
 
 export default function ScheduleDetails({ route, navigation }: any) {
   const { bookingData } = route.params || {};
+  const { user } = useContext(AppContext);
   const [date, setDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [timeSlot, setTimeSlot] = useState('morning');
-  const [street, setStreet] = useState('');
-  const [apartment, setApartment] = useState('');
-  const [city, setCity] = useState('');
-  const [zipCode, setZipCode] = useState('');
+  // Address fields start EMPTY on load — nothing is pre-filled from the
+  // profile. The only way they get populated is manual entry or the
+  // "Use Current Location" action (which copies the saved profile address
+  // or a sample location on tap).
+  const [address, setAddress] = useState<AddressFields>(emptyAddressFields());
   const [instructions, setInstructions] = useState('');
 
   const handleNext = () => {
-    if (!street || !city || !zipCode) {
+    const addressCheck = validateAddressFields(address);
+    if (!addressCheck.isValid) {
+      Alert.alert(
+        'Address Required',
+        `Please enter your ${addressCheck.errors.join(' and ')} to continue.`
+      );
       return;
     }
     const updated = {
       ...bookingData,
       date: date.toISOString().split('T')[0],
       timeSlot,
-      address: street,
-      apartment,
-      city,
-      zipCode,
+      address: address.street,
+      apartment: address.apartment,
+      city: address.city,
+      zipCode: address.zipCode,
       notes: (bookingData?.notes || '') + '\n' + instructions,
     };
     navigation.navigate('Checkout', { bookingData: updated });
+  };
+
+  // "Use Current Location" populates the address from the user's saved profile
+  // address (as an option) or a sample location. Nothing is pre-loaded.
+  const handleUseLocation = () => {
+    const saved = profileToAddressFields(user);
+    const hasSaved = !!(saved.street.trim() || saved.city.trim() || saved.zipCode.trim());
+    const buttons: { text: string; onPress?: () => void; style?: 'cancel' }[] = [];
+    if (hasSaved) {
+      buttons.push({ text: 'Use My Saved Address', onPress: () => setAddress(saved) });
+    }
+    buttons.push({
+      text: 'Use Sample Location',
+      onPress: () =>
+        setAddress({
+          street: currentLocationDemo.street,
+          apartment: '',
+          city: currentLocationDemo.city,
+          zipCode: currentLocationDemo.zipCode,
+        }),
+    });
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    Alert.alert('Use Current Location', 'Choose an address to use for this service.', buttons);
   };
 
   return (
@@ -97,21 +136,29 @@ export default function ScheduleDetails({ route, navigation }: any) {
           ))}
         </View>
 
-        {/* Address */}
+        {/* Address — same structured fields / validation / formatting as the
+            customer profile form, rendered from the shared ADDRESS_FIELDS. */}
         <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 10 }}>Service Address</Text>
         <View style={{ gap: 10, marginBottom: 16 }}>
-          <TextInput value={street} onChangeText={setStreet} placeholder="Street Address *" style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} placeholderTextColor="#94A3B8" />
-          <TextInput value={apartment} onChangeText={setApartment} placeholder="Apt / Suite / Floor" style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} placeholderTextColor="#94A3B8" />
-          <View style={{ flexDirection: 'row', gap: 10 }}>
-            <TextInput value={city} onChangeText={setCity} placeholder="City *" style={{ flex: 2, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} placeholderTextColor="#94A3B8" />
-            <TextInput value={zipCode} onChangeText={setZipCode} placeholder="ZIP *" keyboardType="numeric" maxLength={5} style={{ flex: 1, backgroundColor: '#fff', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} placeholderTextColor="#94A3B8" />
-          </View>
+          {ADDRESS_FIELDS.map((f) => (
+            <TextInput
+              key={f.key}
+              value={address[f.key]}
+              onChangeText={(text) => setAddress((prev) => ({ ...prev, [f.key]: text }))}
+              placeholder={f.placeholder}
+              keyboardType={f.keyboardType || 'default'}
+              maxLength={f.maxLength}
+              style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }}
+              placeholderTextColor="#94A3B8"
+            />
+          ))}
           <TextInput value={instructions} onChangeText={setInstructions} placeholder="Gate code, parking, etc." multiline numberOfLines={2} style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13, textAlignVertical: 'top' }} placeholderTextColor="#94A3B8" />
         </View>
 
-        {/* Use Current Location */}
+        {/* Use Current Location — populates from the saved profile address
+            (as an option) or a sample location. */}
         <TouchableOpacity
-          onPress={() => { setStreet(currentLocationDemo.street); setCity(currentLocationDemo.city); setZipCode(currentLocationDemo.zipCode); }}
+          onPress={handleUseLocation}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#FFF1F6', borderRadius: 10, marginBottom: 24 }}
         >
           <Ionicons name="location" size={16} color="#FF4F8B" />

@@ -1,38 +1,52 @@
-# Fix: Order Technician Assignment ("Select Technician")
+# Technician Checklist Fix — Overview
 
-## What was broken
+## Problem
+The technician-side **Task Checklist** rendered empty even though the customer had
+selected add-on services during booking. Additionally, when a technician added a
+service add-on in the active session, it never appeared in the checklist.
 
-The customer order flow pulled technicians but the **selection never reached the database as a real reference**, and there was **no "active" filtering or validation**. Concretely:
+## Root Cause
+The `Job.checklist` field was never populated from the customer's selections:
+- `mapDbOrderToAppJob` (`src/services/database.service.ts`) **hardcoded `checklist: []`**
+  for every pending order in `order_in_progress`.
+- `mapDbJobToAppJob` only read from the `job_checklists` child table, which is
+  **never seeded** anywhere — so accepted jobs also had an empty checklist.
+- The customer's selections actually live in `focusAreas` (the add-on service labels
+  checked in `ServiceDetails`), but nothing mapped them into the checklist.
+- In `ActiveService.tsx`, the "Add Service Add-on" action only added price — it never
+  appended a checklist task.
 
-1. **Missing data binding (the core bug).** `ServiceDetails.handleNext` only copied `technicianName` / `technicianAvatar` into `bookingData`. The technician's `id` was dropped, so:
-   - `Job` had no `technicianId` field,
-   - the two DB mappers never read `technician_id`,
-   - `createOrderInProgress` and `createJob` never wrote the `technician_id` column.
-   → The chosen technician was persisted only as a free-text name string, not as a validated FK. If names changed or collided, the assignment was ambiguous/lost.
-2. **No "active" filter.** `fetchTechnicians` returned every non-deleted technician; there was no way to hide a deactivated account.
-3. **No validation / stale preselection.** A technician wasn't required, and a preselected local "Recommended" entry (not a real DB id) could silently remain selected even when it wasn't in the active list.
+## Changes
+1. **`src/services/database.service.ts`**
+   - Added `buildChecklistFromFocusAreas(focusAreas, persistedChecklist?)`: prefers any
+     persisted `job_checklists` rows, otherwise derives `{ text, completed: false }[]`
+     from the customer's `focus_areas`.
+   - Both `mapDbOrderToAppJob` and `mapDbJobToAppJob` now seed the checklist from the
+     customer's selected items.
 
-## What changed
+2. **`src/screens/technician/ActiveService.tsx`**
+   - Checklist state is seeded from `job.checklist` (now derived) or falls back to
+     `focusAreas`.
+   - The "Add Service Add-on" button now **also appends a checklist task** (named after
+     the add-on, defaulting to "Additional Service").
+   - `handleComplete` carries the live `checklist` into `ServiceCompletion` so additions
+     survive into the summary.
 
-**Database**
-- `supabase/migrations/00007_add_profiles_is_active.sql` — adds `is_active BOOLEAN NOT NULL DEFAULT true` to `profiles`, a partial index for active technicians, and a `NOTIFY pgrst` schema reload.
+3. **`src/screens/technician/JobDetails.tsx`** and **`ServiceCompletion.tsx`**
+   - Added empty-state guards so a job with no checklist shows a friendly message
+     instead of a blank/erroring list.
 
-**Data layer (`src/services/database.service.ts`)**
-- `fetchTechnicians` now filters `.eq('is_active', true)` (DB-level) in addition to role + `deleted_at`.
-- `Job` type gained `technicianId?` (`src/types/index.ts`).
-- `mapDbJobToAppJob` and `mapDbOrderToAppJob` map `technician_id → technicianId`.
-- `createOrderInProgress` (both the primary and the 23503-retry INSERT) and `createJob` now write `technician_id`.
+4. **`src/data/loader.ts`**
+   - `parseJobs` derives the checklist from `focusAreas` for in-memory mock data too,
+     keeping the data layer consistent.
 
-**UI — `src/screens/customer/ServiceDetails.tsx`**
-- Loading spinner + empty state for the technician list.
-- `handleNext` **requires** a valid technician and persists `technicianId` into `bookingData`.
-- When the DB list loads, any preselected technician that isn't in the active list is cleared (kills stale local preselections).
+## Verification
+- `tsc --noEmit` — zero type errors.
+- `database.service.test.ts` — 12/12 passing.
+- Note: 2 failing tests exist in the untracked `location.service.test.ts` (a newly added
+  `location.service` module unrelated to this fix). They were not touched.
 
-**UI — `src/screens/customer/Checkout.tsx`**
-- `handlePay` validates `bookingData.technicianId` exists before saving (aborts with an alert if missing) and passes it to `createOrderInProgress`.
-
-**Tests**
-- Added 2 cases (active-only filter; `technician_id` persisted + mapped back). `npm test` → **46 passed**, `tsc --noEmit` → clean.
-
-## Action required
-Run migration `00007` against your Supabase project so the `is_active` column exists; otherwise the technician query will fail on the missing column. After that, only active technicians appear in "Select Technician", the chosen one is stored as `technician_id`, and the order save is validated.
+## Result
+The technician Task Checklist now correctly displays the items the customer selected,
+and any service add-on added during the visit is automatically included as a checklist
+task.

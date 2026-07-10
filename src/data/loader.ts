@@ -283,11 +283,21 @@ function parseTechnicians(
  */
 function parseJobs(raw: unknown): Job[] {
   const arr = safeArray<any>(raw, []);
-  return arr.map((j) => ({
-    ...j,
-    customerAvatar: resolveAvatar(j.customerAvatarKey ?? ''),
-    technicianAvatar: resolveAvatar(j.technicianAvatarKey ?? ''),
-  }));
+  return arr.map((j) => {
+    const focusAreas = Array.isArray(j.focusAreas) ? j.focusAreas : [];
+    const checklist =
+      Array.isArray(j.checklist) && j.checklist.length > 0
+        ? j.checklist
+        : focusAreas
+            .filter((f: unknown) => typeof f === 'string' && f.trim().length > 0)
+            .map((f: string) => ({ text: f.trim(), completed: false }));
+    return {
+      ...j,
+      customerAvatar: resolveAvatar(j.customerAvatarKey ?? ''),
+      technicianAvatar: resolveAvatar(j.technicianAvatarKey ?? ''),
+      checklist,
+    };
+  });
 }
 
 /**

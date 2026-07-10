@@ -58,3 +58,13 @@ export function logAndThrow(operation: string, error: unknown): never {
 export function isForeignKeyViolation(error: unknown): boolean {
   return toDbError(error).code === '23503';
 }
+
+/**
+ * True for Postgres unique-violation errors (SQLSTATE 23505).
+ * Used by the data layer to translate a raw constraint violation (e.g. a
+ * customer submitting two reviews for the same job, which violates the
+ * UNIQUE(job_id) index on `reviews`) into a friendly, actionable message.
+ */
+export function isUniqueViolation(error: unknown): boolean {
+  return toDbError(error).code === '23505';
+}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, memo } from 'react';
+import React, { useState, useEffect, useContext, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -16,16 +16,44 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppContext } from '../../navigation/AppNavigator';
 import { getImageUrl, categories, recommendedTechnicians, mockNotifications, cities, defaultLocation, getStatusColor, categoryConfig } from '../../data';
 import { PINK, PINK_SOFT, INK, MUTED, ACCENT, ACCENT_SOFT, CANVAS } from '../../theme/colors';
-import { Technician, Job } from '../../types';
+import { Technician, Job, SavedPaymentMethod, Review } from '../../types';
 import { updateProfile } from '../../services/auth.service';
 import { fetchTechnicians } from '../../services/database.service';
+import { fetchTopReview } from '../../services/review.service';
+import {
+  getPaymentMethods,
+  addPaymentMethod,
+  deletePaymentMethod,
+  setDefaultPaymentMethod,
+  formatCardNumber,
+  normalizeExpiry,
+  detectCardBrand,
+} from '../../services/payment.service';
+import {
+  ADDRESS_FIELDS,
+  formatAddress,
+  profileToAddressFields,
+  addressFieldsToProfile,
+  validateAddressFields,
+  type AddressFields,
+} from '../../services/address';
 
 // Delight Experience palette — imported from theme/colors
+
+const fieldStyle = {
+  borderWidth: 1,
+  borderColor: '#F1F5F9',
+  borderRadius: 12,
+  padding: 12,
+  fontSize: 13,
+  color: '#0F172A',
+} as const;
 
 export default memo(function CustomerHome({ route, navigation }: any) {
   const { user, setUser, jobs, logout, refreshJobs } = useContext(AppContext);
   const activeTab = route?.params?.tab || 'home';
   const [technicians, setTechnicians] = useState<Technician[]>([]);
+  const [techTopReviews, setTechTopReviews] = useState<Record<string, Review | null>>({});
   const [refreshing, setRefreshing] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(defaultLocation);
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -35,16 +63,50 @@ export default memo(function CustomerHome({ route, navigation }: any) {
   const [showNotifications, setShowNotifications] = useState(false);
   const [profileName, setProfileName] = useState(user?.name || '');
   const [profilePhone, setProfilePhone] = useState(user?.phone || '');
-  const [profileAddress, setProfileAddress] = useState(user?.address || '');
+  const [addr, setAddr] = useState<AddressFields>(profileToAddressFields(user));
   const [editingProfile, setEditingProfile] = useState(false);
+  // Mirrors the order form's requirement: a non-empty street is the minimum
+  // for a "complete" address (city + ZIP are enforced on save via validation).
+  const profileAddressSet = !!(user?.address && user.address.trim());
+
+  // Payment methods — managed in the profile, sourced from the customer's
+  // private (RLS-scoped) payment_methods table. New accounts start empty.
+  const [paymentMethods, setPaymentMethods] = useState<SavedPaymentMethod[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [showCardModal, setShowCardModal] = useState(false);
+  const [cardName, setCardName] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvv, setCardCvv] = useState('');
+  const [savingCard, setSavingCard] = useState(false);
+  const [cardError, setCardError] = useState<string | null>(null);
+
+  // Recommended technicians + each one's highest-rated written review.
+  // Refetched whenever the Home tab becomes active, so a review submitted on
+  // the tracking screen is reflected here immediately after submission.
+  const loadRecommended = useCallback(async () => {
+    try {
+      const data = await fetchTechnicians();
+      setTechnicians(data);
+      const topTechs = data.slice(0, 2).filter((t) => t.id);
+      const tops = await Promise.all(
+        topTechs.map((t) => fetchTopReview(t.id as string))
+      );
+      const map: Record<string, Review | null> = {};
+      topTechs.forEach((t, i) => {
+        map[t.id as string] = tops[i];
+      });
+      setTechTopReviews(map);
+    } catch (err) {
+      console.error('Failed to load recommended technicians:', err);
+    }
+  }, []);
 
   useEffect(() => {
-    fetchTechnicians().then((data) => {
-      setTechnicians(data);
-    }).catch((err) => {
-      console.error('Failed to fetch technicians:', err);
-    });
-  }, []);
+    if (activeTab === 'home') {
+      loadRecommended();
+    }
+  }, [activeTab, loadRecommended]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -61,6 +123,87 @@ export default memo(function CustomerHome({ route, navigation }: any) {
   };
 
   const getStatusColorFn = (status: string) => getStatusColor(status, 'customer');
+
+  // ---- Payment method management (profile) -------------------------------
+  const loadPaymentMethods = useCallback(async () => {
+    setLoadingPayments(true);
+    try {
+      const methods = await getPaymentMethods();
+      setPaymentMethods(methods);
+    } catch (err) {
+      console.error('Failed to load payment methods:', err);
+    } finally {
+      setLoadingPayments(false);
+    }
+  }, []);
+
+  // Load saved cards whenever the Profile tab becomes active. New accounts
+  // simply render an empty list — no payment data is seeded.
+  useEffect(() => {
+    if (activeTab === 'profile') {
+      loadPaymentMethods();
+    }
+  }, [activeTab, loadPaymentMethods]);
+
+  const handleAddCard = async () => {
+    setCardError(null);
+    const exp = normalizeExpiry(cardExpiry);
+    if (!exp) {
+      setCardError('Please enter a valid expiry date (MM/YY).');
+      return;
+    }
+    setSavingCard(true);
+    try {
+      await addPaymentMethod({
+        cardNumber,
+        cardholderName: cardName,
+        expiryMonth: exp.month,
+        expiryYear: exp.year,
+        cvv: cardCvv,
+      });
+      setShowCardModal(false);
+      setCardName('');
+      setCardNumber('');
+      setCardExpiry('');
+      setCardCvv('');
+      await loadPaymentMethods();
+    } catch (err: any) {
+      setCardError(err?.message || 'Could not save this card.');
+    } finally {
+      setSavingCard(false);
+    }
+  };
+
+  const handleDeleteCard = (method: SavedPaymentMethod) => {
+    Alert.alert(
+      'Remove card',
+      `Remove ${method.brand.charAt(0).toUpperCase() + method.brand.slice(1)} •••• ${method.last4}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deletePaymentMethod(method.id);
+              await loadPaymentMethods();
+            } catch (err: any) {
+              Alert.alert('Error', err?.message || 'Could not remove this card.');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSetDefault = async (method: SavedPaymentMethod) => {
+    try {
+      await setDefaultPaymentMethod(method.id);
+      await loadPaymentMethods();
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Could not update the default card.');
+    }
+  };
 
   // Profile Tab
   if (activeTab === 'profile') {
@@ -83,14 +226,39 @@ export default memo(function CustomerHome({ route, navigation }: any) {
 
           {editingProfile ? (
             <View style={{ gap: 12 }}>
-              <TextInput value={profileName} onChangeText={setProfileName} style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} />
-              <TextInput value={profilePhone} onChangeText={setProfilePhone} style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} />
-              <TextInput value={profileAddress} onChangeText={setProfileAddress} style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} />
+              <TextInput value={profileName} onChangeText={setProfileName} placeholder="Name" style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} />
+              <TextInput value={profilePhone} onChangeText={setProfilePhone} placeholder="Phone * (required to order)" keyboardType="phone-pad" style={{ borderWidth: 1, borderColor: profilePhone.trim() ? '#F1F5F9' : '#FECACA', borderRadius: 12, padding: 12, fontSize: 13 }} />
+              {/* Address — same structured fields / validation / formatting as the
+                  order form, rendered from the shared ADDRESS_FIELDS config. */}
+              {ADDRESS_FIELDS.map((f) => {
+                const value = addr[f.key];
+                const invalid = f.required && !value.trim();
+                return (
+                  <TextInput
+                    key={f.key}
+                    value={value}
+                    onChangeText={(text) => setAddr((prev) => ({ ...prev, [f.key]: text }))}
+                    placeholder={f.placeholder}
+                    keyboardType={f.keyboardType || 'default'}
+                    maxLength={f.maxLength}
+                    style={{ borderWidth: 1, borderColor: invalid ? '#FECACA' : '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }}
+                  />
+                );
+              })}
               <TouchableOpacity onPress={async () => {
+                if (!profilePhone.trim()) {
+                  Alert.alert('Required Fields', 'Please add your phone number — it is required before placing an order.');
+                  return;
+                }
+                const addressCheck = validateAddressFields(addr);
+                if (!addressCheck.isValid) {
+                  Alert.alert('Address Required', `Please complete your ${addressCheck.errors.join(' and ')} — both are required before placing an order.`);
+                  return;
+                }
                 const result = await updateProfile({
                   name: profileName || undefined,
                   phone: profilePhone || undefined,
-                  address: profileAddress || undefined,
+                  ...addressFieldsToProfile(addr),
                 });
                 if (result.error) {
                   Alert.alert('Error', result.error);
@@ -109,12 +277,12 @@ export default memo(function CustomerHome({ route, navigation }: any) {
                 <Text style={{ fontSize: 13, color: '#0F172A' }}>{profileName || 'No name set'}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Ionicons name="call-outline" size={16} color="#64748B" />
-                <Text style={{ fontSize: 13, color: '#64748B' }}>{profilePhone || 'No phone set'}</Text>
+                <Ionicons name="call-outline" size={16} color={profilePhone ? '#64748B' : '#EF4444'} />
+                <Text style={{ fontSize: 13, color: profilePhone ? '#0F172A' : '#EF4444', fontWeight: profilePhone ? '400' : '700' }}>{profilePhone || 'No phone set (required)'}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                <Ionicons name="location-outline" size={16} color="#64748B" />
-                <Text style={{ fontSize: 13, color: '#64748B' }}>{profileAddress || 'No address set'}</Text>
+                <Ionicons name="location-outline" size={16} color={profileAddressSet ? '#64748B' : '#EF4444'} />
+                <Text style={{ fontSize: 13, color: profileAddressSet ? '#0F172A' : '#EF4444', fontWeight: profileAddressSet ? '400' : '700' }}>{profileAddressSet ? formatAddress(profileToAddressFields(user)) : 'No address set (required)'}</Text>
               </View>
               <TouchableOpacity onPress={() => setEditingProfile(true)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 }}>
                 <Ionicons name="create-outline" size={14} color="#FF4F8B" />
@@ -122,6 +290,61 @@ export default memo(function CustomerHome({ route, navigation }: any) {
               </TouchableOpacity>
             </View>
           )}
+        </View>
+
+        {/* Payment Methods — relocated here from Checkout; sourced from the
+            customer's private (RLS-scoped) payment_methods table. */}
+        <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#0F172A' }}>Payment Methods</Text>
+            <TouchableOpacity onPress={() => { setCardError(null); setShowCardModal(true); }} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Ionicons name="add" size={14} color="#FF4F8B" />
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#FF4F8B' }}>Add Card</Text>
+            </TouchableOpacity>
+          </View>
+
+          {loadingPayments ? (
+            <Text style={{ fontSize: 12, color: '#64748B' }}>Loading…</Text>
+          ) : paymentMethods.length === 0 ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F8FAFC', borderRadius: 12, padding: 14 }}>
+              <Ionicons name="card-outline" size={20} color="#94A3B8" />
+              <Text style={{ fontSize: 12, color: '#64748B', flex: 1 }}>No cards saved yet. Add a card to check out faster.</Text>
+            </View>
+          ) : (
+            <View style={{ gap: 10 }}>
+              {paymentMethods.map((m) => (
+                <View key={m.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#F8FAFC', borderRadius: 12, padding: 14 }}>
+                  <Ionicons name="card-outline" size={20} color="#FF4F8B" />
+                  <View style={{ flex: 1 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F172A' }}>
+                        {m.brand.charAt(0).toUpperCase() + m.brand.slice(1)} •••• {m.last4}
+                      </Text>
+                      {m.isDefault && (
+                        <View style={{ backgroundColor: '#FFE2EC', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 9, fontWeight: '700', color: '#FF4F8B' }}>DEFAULT</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                      Exp {String(m.expMonth).padStart(2, '0')}/{String(m.expYear).slice(-2)}
+                    </Text>
+                  </View>
+                  {!m.isDefault && (
+                    <TouchableOpacity onPress={() => handleSetDefault(m)}>
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: '#FF4F8B' }}>Set default</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity onPress={() => handleDeleteCard(m)}>
+                    <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </View>
+          )}
+          <Text style={{ fontSize: 10, color: '#94A3B8', marginTop: 10, lineHeight: 14 }}>
+            Cards are stored privately and tokenized — your full number is never saved.
+          </Text>
         </View>
 
         <View style={{ backgroundColor: '#D1FAE5', borderRadius: 16, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 20 }}>
@@ -133,6 +356,78 @@ export default memo(function CustomerHome({ route, navigation }: any) {
           <Ionicons name="log-out-outline" size={16} color="#EF4444" />
           <Text style={{ fontSize: 13, fontWeight: '700', color: '#EF4444' }}>Log Out</Text>
         </TouchableOpacity>
+
+        {/* Add Card Modal — all fields start EMPTY; only a tokenized record is saved */}
+        <Modal visible={showCardModal} transparent animationType="slide">
+          <TouchableOpacity style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' }} onPress={() => setShowCardModal(false)} activeOpacity={1}>
+            <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+              <TouchableOpacity activeOpacity={1} style={{ backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20 }}>
+                <View style={{ width: 40, height: 4, backgroundColor: '#E5E7EB', borderRadius: 2, alignSelf: 'center', marginBottom: 16 }} />
+                <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 16 }}>Add a Card</Text>
+
+                <TextInput
+                  value={cardName}
+                  onChangeText={setCardName}
+                  placeholder="Cardholder Name"
+                  autoCapitalize="words"
+                  style={fieldStyle}
+                />
+                <View style={{ position: 'relative', marginTop: 12 }}>
+                  <TextInput
+                    value={formatCardNumber(cardNumber)}
+                    onChangeText={(t) => setCardNumber(t.replace(/\D/g, ''))}
+                    placeholder="Card Number"
+                    keyboardType="number-pad"
+                    maxLength={19}
+                    style={fieldStyle}
+                  />
+                  {cardNumber.length >= 2 && detectCardBrand(cardNumber) !== 'unknown' && (
+                    <Text style={{ position: 'absolute', right: 12, top: 14, fontSize: 12, fontWeight: '700', color: '#64748B' }}>
+                      {detectCardBrand(cardNumber).toUpperCase()}
+                    </Text>
+                  )}
+                </View>
+                <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+                  <TextInput
+                    value={cardExpiry}
+                    onChangeText={(t) => {
+                      const digits = t.replace(/\D/g, '').slice(0, 4);
+                      setCardExpiry(digits.length >= 3 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits);
+                    }}
+                    placeholder="MM/YY"
+                    keyboardType="number-pad"
+                    maxLength={5}
+                    style={[fieldStyle, { flex: 1 }]}
+                  />
+                  <TextInput
+                    value={cardCvv}
+                    onChangeText={(t) => setCardCvv(t.replace(/\D/g, '').slice(0, 4))}
+                    placeholder="CVV"
+                    keyboardType="number-pad"
+                    secureTextEntry
+                    maxLength={4}
+                    style={[fieldStyle, { flex: 1 }]}
+                  />
+                </View>
+
+                {cardError && (
+                  <Text style={{ fontSize: 12, color: '#EF4444', marginTop: 10 }}>{cardError}</Text>
+                )}
+
+                <TouchableOpacity
+                  onPress={handleAddCard}
+                  disabled={savingCard}
+                  style={{ backgroundColor: savingCard ? '#FFE2EC' : '#FF4F8B', padding: 14, borderRadius: 12, alignItems: 'center', marginTop: 16 }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>{savingCard ? 'Saving…' : 'Save Card'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowCardModal(false)} style={{ alignItems: 'center', marginTop: 10 }}>
+                  <Text style={{ color: '#64748B', fontSize: 13 }}>Cancel</Text>
+                </TouchableOpacity>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -411,7 +706,9 @@ export default memo(function CustomerHome({ route, navigation }: any) {
       {/* Recommended Technicians */}
       <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A', paddingHorizontal: 20, marginBottom: 12 }}>Recommended</Text>
       <View style={{ flexDirection: 'row', paddingHorizontal: 16, gap: 12 }}>
-        {(technicians.length > 0 ? technicians : recommendedTechnicians).slice(0, 2).map((tech, i) => (
+        {(technicians.length > 0 ? technicians : recommendedTechnicians).slice(0, 2).map((tech, i) => {
+          const top = tech.id ? techTopReviews[tech.id] : undefined;
+          return (
           <TouchableOpacity
             key={tech.id || i}
             onPress={() => startBooking(tech.specialty || 'cleaning', tech)}
@@ -443,9 +740,20 @@ export default memo(function CustomerHome({ route, navigation }: any) {
               <Text style={{ fontSize: 11, fontWeight: '600', color: '#0F172A' }}>{tech.rating}</Text>
               <Text style={{ fontSize: 10, color: '#94A3B8' }}>({tech.reviewsCount})</Text>
             </View>
+            {top?.comment ? (
+              <View style={{ marginTop: 6, backgroundColor: '#F8FAFC', borderRadius: 8, padding: 8, marginBottom: 6 }}>
+                <Text style={{ fontSize: 9, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
+                  Top Review
+                </Text>
+                <Text numberOfLines={2} style={{ fontSize: 10, color: '#475569', lineHeight: 14, fontStyle: 'italic' }}>
+                  "{top.comment}"
+                </Text>
+              </View>
+            ) : null}
             <Text style={{ fontSize: 12, fontWeight: '700', color: '#FF4F8B' }}>${tech.ratePerHour}/hr</Text>
           </TouchableOpacity>
-        ))}
+          );
+        })}
       </View>
 
       {/* Location Modal */}

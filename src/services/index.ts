@@ -78,3 +78,45 @@ export {
   triggerManualSync,
 } from './sync.service';
 export type { SyncState, SyncStatus } from './sync.service';
+
+// 支付（客户支付方式管理，仅存储 tokenized 记录 + RLS 私有）
+export {
+  getPaymentMethods,
+  addPaymentMethod,
+  deletePaymentMethod,
+  setDefaultPaymentMethod,
+  detectCardBrand,
+  luhnValid,
+  formatCardNumber,
+  normalizeExpiry,
+  isExpiryValid,
+} from './payment.service';
+
+// 地址（客户资料与下单表单共享的字段结构 / 校验 / 格式化）
+export {
+  ADDRESS_FIELDS,
+  ADDRESS_FIELD_KEYS,
+  emptyAddressFields,
+  validateAddressFields,
+  formatAddress,
+  profileToAddressFields,
+  addressFieldsToProfile,
+} from './address';
+export type { AddressFields, AddressFieldConfig, AddressValidation } from './address';
+
+// 资料校验（下单地址 + 电话、接单电话、拨号归一化）
+export {
+  validateCustomerOrderProfile,
+  validateTechnicianAcceptProfile,
+  normalizePhoneForDial,
+} from './validation';
+
+// 评价（订单完成后客户对技师打分 + 文本评价，服务端触发器实时汇总）
+export {
+  submitReview,
+  fetchTechnicianReviews,
+  fetchTopReview,
+  fetchReviewForJob,
+  fetchTechnicianStats,
+} from './review.service';
+export type { SubmitReviewInput, TechnicianReviewStats } from './review.service';

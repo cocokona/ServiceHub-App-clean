@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,46 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { AppContext } from '../../navigation/AppNavigator';
-import { Job } from '../../types';
-import { paymentMethods, defaultChecklist, defaultTravelFee } from '../../data';
+import { Job, SavedPaymentMethod } from '../../types';
+import { defaultTravelFee } from '../../data';
 import { PINK, PINK_SOFT, INK, MUTED, SUCCESS, SUCCESS_SOFT, CANVAS } from '../../theme/colors';
 import { createOrderInProgress, ensureProfile } from '../../services/database.service';
+import { getPaymentMethods } from '../../services/payment.service';
+import { validateCustomerOrderProfile } from '../../services/validation';
 
 export default function Checkout({ route, navigation }: any) {
   const { bookingData } = route.params || {};
   const { user, setJobs, refreshJobs } = useContext(AppContext);
-  const [paymentMethod, setPaymentMethod] = useState('credit_card');
+
+  // Payment methods are managed in the customer's profile and stored in the
+  // private (RLS-scoped) payment_methods table. New accounts have none, so the
+  // selector below renders an empty state with a link to the profile.
+  useEffect(() => {
+    let active = true;
+    getPaymentMethods()
+      .then((methods) => {
+        if (!active) return;
+        setSavedMethods(methods);
+        const preferred = methods.find((m) => m.isDefault) || methods[0];
+        setSelectedPaymentId(preferred ? preferred.id : null);
+      })
+      .catch((err) => console.error('Failed to load payment methods:', err));
+    return () => {
+      active = false;
+    };
+  }, []);
+  const [savedMethods, setSavedMethods] = useState<SavedPaymentMethod[]>([]);
+  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+
+  // The customer profile must have a service address and phone before any
+  // order can be placed. We compute this once per render so both the Pay
+  // button (disabled state) and the inline warning banner stay in sync.
+  const profileCheck = validateCustomerOrderProfile({
+    address: user?.address,
+    phone: user?.phone,
+  });
+  const profileReady = profileCheck.isValid;
 
   const handlePay = async () => {
     setPaying(true);
@@ -27,6 +57,24 @@ export default function Checkout({ route, navigation }: any) {
       // Validate user ID exists before proceeding
       if (!user?.id) {
         Alert.alert('Error', 'Please log in to continue with checkout.');
+        return;
+      }
+
+      // Enforce mandatory customer profile fields (address + phone) before
+      // placing an order. Without these, the technician cannot reach the
+      // customer or contact them about the job.
+      if (!profileReady) {
+        Alert.alert(
+          'Profile Incomplete',
+          `Please add your ${profileCheck.errors.join(' and ')} in your profile before placing an order.`,
+          [
+            {
+              text: 'Edit Profile',
+              onPress: () => navigation.navigate('CustomerTabs', { screen: 'Profile' }),
+            },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
         return;
       }
 
@@ -103,6 +151,25 @@ export default function Checkout({ route, navigation }: any) {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
+        {/* Profile completeness gate — shown when address/phone are missing */}
+        {!profileReady && (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: '#FEF2F2', borderWidth: 1, borderColor: '#FECACA', borderRadius: 14, padding: 14, marginBottom: 20 }}>
+            <Ionicons name="warning" size={18} color="#EF4444" style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#B91C1C' }}>Profile information required</Text>
+              <Text style={{ fontSize: 12, color: '#7F1D1D', marginTop: 2, lineHeight: 16 }}>
+                Add your {profileCheck.errors.join(' and ')} in your profile before placing an order.
+              </Text>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('CustomerTabs', { screen: 'Profile' })}
+                style={{ marginTop: 8, alignSelf: 'flex-start', backgroundColor: '#EF4444', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>Go to Profile</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Service Review */}
         <Text style={{ fontSize: 11, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
           Service Review
@@ -126,36 +193,63 @@ export default function Checkout({ route, navigation }: any) {
           )}
         </View>
 
-        {/* Payment Method */}
+        {/* Payment Method — sourced from the customer's saved (profile-managed) cards */}
         <Text style={{ fontSize: 11, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
           Payment Method
         </Text>
-        <View style={{ gap: 10, marginBottom: 24 }}>
-          {paymentMethods.map((pm) => (
+        {savedMethods.length === 0 ? (
+          <View style={{ backgroundColor: '#F8FAFC', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#F1F5F9', flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+            <Ionicons name="card-outline" size={22} color="#94A3B8" />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: INK }}>No payment method saved</Text>
+              <Text style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>Add a card in your profile to check out faster.</Text>
+            </View>
             <TouchableOpacity
-              key={pm.key}
-              onPress={() => setPaymentMethod(pm.key)}
-              activeOpacity={0.85}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                padding: 14,
-                borderRadius: 16,
-                borderWidth: 1.5,
-                borderColor: paymentMethod === pm.key ? PINK : '#E5E7EB',
-                backgroundColor: paymentMethod === pm.key ? PINK_SOFT : '#fff',
-                gap: 12,
-              }}
+              onPress={() => navigation.navigate('CustomerTabs', { screen: 'Profile' })}
+              style={{ backgroundColor: PINK, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999 }}
             >
-              <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: paymentMethod === pm.key ? PINK : '#CBD5E1', justifyContent: 'center', alignItems: 'center' }}>
-                {paymentMethod === pm.key && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: PINK }} />}
-              </View>
-              <Ionicons name={pm.icon as keyof typeof Ionicons.glyphMap} size={20} color={paymentMethod === pm.key ? PINK : MUTED} />
-              <Text style={{ fontSize: 13, fontWeight: '700', color: INK, flex: 1 }}>{pm.label}</Text>
-              {pm.last4 && <Text style={{ fontSize: 12, color: MUTED }}>****{pm.last4}</Text>}
+              <Text style={{ fontSize: 11, fontWeight: '700', color: '#fff' }}>Add</Text>
             </TouchableOpacity>
-          ))}
-        </View>
+          </View>
+        ) : (
+          <View style={{ gap: 10, marginBottom: 24 }}>
+            {savedMethods.map((pm) => (
+              <TouchableOpacity
+                key={pm.id}
+                onPress={() => setSelectedPaymentId(pm.id)}
+                activeOpacity={0.85}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  padding: 14,
+                  borderRadius: 16,
+                  borderWidth: 1.5,
+                  borderColor: selectedPaymentId === pm.id ? PINK : '#E5E7EB',
+                  backgroundColor: selectedPaymentId === pm.id ? PINK_SOFT : '#fff',
+                  gap: 12,
+                }}
+              >
+                <View style={{ width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: selectedPaymentId === pm.id ? PINK : '#CBD5E1', justifyContent: 'center', alignItems: 'center' }}>
+                  {selectedPaymentId === pm.id && <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: PINK }} />}
+                </View>
+                <Ionicons name="card-outline" size={20} color={selectedPaymentId === pm.id ? PINK : MUTED} />
+                <Text style={{ fontSize: 13, fontWeight: '700', color: INK, flex: 1 }}>
+                  {pm.brand.charAt(0).toUpperCase() + pm.brand.slice(1)} •••• {pm.last4}
+                </Text>
+                <Text style={{ fontSize: 11, color: MUTED }}>
+                  {String(pm.expMonth).padStart(2, '0')}/{String(pm.expYear).slice(-2)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              onPress={() => navigation.navigate('CustomerTabs', { screen: 'Profile' })}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start' }}
+            >
+              <Ionicons name="create-outline" size={14} color={PINK} />
+              <Text style={{ fontSize: 12, fontWeight: '600', color: PINK }}>Manage in Profile</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Payment Summary */}
         <Text style={{ fontSize: 11, fontWeight: '700', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 10 }}>
@@ -198,21 +292,21 @@ export default function Checkout({ route, navigation }: any) {
       <View style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#F1F5F9', padding: 16, paddingBottom: 32 }}>
         <TouchableOpacity
           onPress={handlePay}
-          disabled={paying}
+          disabled={paying || !profileReady}
           activeOpacity={0.85}
           style={{
-            backgroundColor: paying ? PINK_SOFT : PINK,
+            backgroundColor: paying || !profileReady ? PINK_SOFT : PINK,
             paddingVertical: 16,
             borderRadius: 999,
             flexDirection: 'row',
             justifyContent: 'center',
             alignItems: 'center',
             gap: 8,
-            shadowColor: paying ? 'transparent' : PINK,
+            shadowColor: paying || !profileReady ? 'transparent' : PINK,
             shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: paying ? 0 : 0.3,
+            shadowOpacity: paying || !profileReady ? 0 : 0.3,
             shadowRadius: 16,
-            elevation: paying ? 0 : 4,
+            elevation: paying || !profileReady ? 0 : 4,
           }}
         >
           {paying ? (

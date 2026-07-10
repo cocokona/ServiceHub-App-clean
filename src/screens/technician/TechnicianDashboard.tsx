@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppContext } from '../../navigation/AppNavigator';
 import { Job } from '../../types';
 import { updateProfile } from '../../services/auth.service';
+import { validateTechnicianAcceptProfile } from '../../services/validation';
 import { fetchAllOrdersInProgress, acceptOrderInProgress, fetchTechnicianAvailability, setTechnicianAvailability } from '../../services/database.service';
 import { scheduleSlots, technicianFilters, getStatusColor } from '../../data';
 
@@ -137,6 +138,23 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
   // Accept an order — moves it from order_in_progress to jobs
   const handleAcceptOrder = async (orderId: string) => {
     if (!user?.id) return;
+
+    // Enforce mandatory technician phone before accepting an order. Customers
+    // need a way to reach the technician about their job, so a technician
+    // without a phone on file cannot take work.
+    const phoneCheck = validateTechnicianAcceptProfile({ phone: user?.phone });
+    if (!phoneCheck.isValid) {
+      Alert.alert(
+        'Phone Number Required',
+        'You must add a phone number to your profile before accepting orders, so customers can reach you.',
+        [
+          { text: 'Edit Profile', onPress: () => navigation.navigate('Profile') },
+          { text: 'Cancel', style: 'cancel' },
+        ]
+      );
+      return;
+    }
+
     setAcceptingId(orderId);
     try {
       await acceptOrderInProgress(orderId, user.id);
@@ -153,6 +171,12 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
   };
 
   const handleSaveProfile = async () => {
+    // Technicians must keep a phone number on file (required to accept orders).
+    if (user?.role === 'technician' && !phone.trim()) {
+      Alert.alert('Phone Required', 'A phone number is required for technicians so customers can reach you.');
+      return;
+    }
+
     try {
       const result = await updateProfile({
         bio: bio || undefined,
@@ -197,7 +221,7 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
           {editingProfile ? (
             <View style={{ gap: 12 }}>
               <TextInput value={bio} onChangeText={setBio} placeholder="Bio" multiline style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13, textAlignVertical: 'top' }} placeholderTextColor="#94A3B8" />
-              <TextInput value={phone} onChangeText={setPhone} placeholder="Phone" style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} placeholderTextColor="#94A3B8" />
+              <TextInput value={phone} onChangeText={setPhone} placeholder="Phone * (required to accept orders)" keyboardType="phone-pad" style={{ borderWidth: 1, borderColor: phone.trim() ? '#F1F5F9' : '#FECACA', borderRadius: 12, padding: 12, fontSize: 13 }} placeholderTextColor="#94A3B8" />
               <TextInput value={hourlyRate} onChangeText={setHourlyRate} placeholder="Hourly Rate" keyboardType="numeric" style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} placeholderTextColor="#94A3B8" />
               <View style={{ flexDirection: 'row', gap: 10 }}>
                 <TouchableOpacity onPress={() => setEditingProfile(false)} style={{ flex: 1, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#F1F5F9', alignItems: 'center' }}>
@@ -211,8 +235,8 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
           ) : (
             <View style={{ gap: 10 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="call-outline" size={14} color="#64748B" />
-                <Text style={{ fontSize: 13, color: '#0F172A' }}>{phone || 'No phone set'}</Text>
+                <Ionicons name="call-outline" size={14} color={phone ? '#64748B' : '#EF4444'} />
+                <Text style={{ fontSize: 13, color: phone ? '#0F172A' : '#EF4444', fontWeight: phone ? '400' : '700' }}>{phone || 'No phone set (required)'}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="cash-outline" size={14} color="#64748B" />

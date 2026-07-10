@@ -71,6 +71,30 @@ export interface Technician {
   reviewsCount: number;
   specialty: string;
   ratePerHour: number;
+  /**
+   * The technician's highest-rated written review (text). Surfaced in the
+   * customer-facing recommended section alongside the average rating and
+   * review count. Null/undefined when the technician has no written reviews.
+   */
+  topReview?: string | null;
+  topReviewRating?: number | null;
+}
+
+/**
+ * A customer review left for a technician after an order completes.
+ * Persisted in the `reviews` table; the technician's aggregate rating and
+ * review count are maintained server-side by a database trigger, so this
+ * record is the single source of truth for a given job.
+ */
+export interface Review {
+  id: string;
+  jobId: string;
+  customerId: string;
+  technicianId: string;
+  /** 1–5 star rating. */
+  rating: number;
+  comment: string | null;
+  createdAt: string;
 }
 
 export interface User {
@@ -83,6 +107,47 @@ export interface User {
   phone?: string;
   hourlyRate?: number;
   address?: string;
+  apartment?: string;
+  city?: string;
+  zipCode?: string;
   rating?: number;
   reviewsCount?: number;
+}
+
+/**
+ * Supported card brands. We derive this client-side from the card number's
+ * IIN range; the value is what we persist (never the full PAN).
+ */
+export type CardBrand = 'visa' | 'mastercard' | 'amex' | 'discover' | 'unknown';
+
+/**
+ * A customer's saved payment method. NOTE: this is a tokenized record — the
+ * full card number (PAN) and CVV are intentionally NOT stored anywhere. Only
+ * the brand, last 4 digits, expiry, cardholder name, and a payment token are
+ * persisted, so the data is safe even in a private database.
+ */
+export interface SavedPaymentMethod {
+  id: string;
+  profileId: string;
+  brand: CardBrand;
+  last4: string;
+  expMonth: number;
+  expYear: number;
+  cardholderName: string;
+  token: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+
+/**
+ * Raw input collected from the card-entry form. `cardNumber` and `cvv` are
+ * used ONLY for client-side validation and brand/expiry derivation; they are
+ * never written to the database.
+ */
+export interface AddPaymentMethodInput {
+  cardNumber: string;
+  cardholderName: string;
+  expiryMonth: number;
+  expiryYear: number;
+  cvv: string;
 }

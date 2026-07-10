@@ -13,12 +13,20 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppContext } from '../../navigation/AppNavigator';
 import { Job } from '../../types';
 import { addOnStandardRate, activeServiceMenuOptions } from '../../data';
+import { stopLocationSharing } from '../../services/location.service';
 
 export default function ActiveService({ route, navigation }: any) {
   const { job } = route.params || {};
   const { updateJobStatus } = useContext(AppContext);
   const [seconds, setSeconds] = useState(job?.elapsedTime || 0);
-  const [checklist, setChecklist] = useState(job?.checklist || []);
+  // Seed the checklist from the job's persisted checklist (now derived from the
+  // customer's selected add-on services) and fall back to the selected
+  // focusAreas if, for any reason, the job carries no checklist yet.
+  const initialChecklist =
+    job?.checklist && job.checklist.length > 0
+      ? job.checklist
+      : (job?.focusAreas || []).map((f: string) => ({ text: f, completed: false }));
+  const [checklist, setChecklist] = useState(initialChecklist);
   const [showAddOnModal, setShowAddOnModal] = useState(false);
   const [addOnName, setAddOnName] = useState('');
   const [addOnsPrice, setAddOnsPrice] = useState(0);
@@ -50,8 +58,11 @@ export default function ActiveService({ route, navigation }: any) {
   };
 
   const handleComplete = () => {
+    stopLocationSharing(); // stop live sharing when the job ends
     updateJobStatus(job.id, { status: 'completed', elapsedTime: seconds, addOnsPrice, totalPrice });
-    navigation.navigate('ServiceCompletion', { job: { ...job, status: 'completed', elapsedTime: seconds, addOnsPrice, totalPrice } });
+    // Carry the live checklist (including any add-ons added during the visit)
+    // into the completion summary so it reflects every task performed.
+    navigation.navigate('ServiceCompletion', { job: { ...job, status: 'completed', elapsedTime: seconds, addOnsPrice, totalPrice, checklist } });
   };
 
   return (
@@ -146,7 +157,16 @@ export default function ActiveService({ route, navigation }: any) {
                   <Text style={{ fontSize: 13, fontWeight: '600', color: '#64748B' }}>Cancel</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  onPress={() => { setAddOnsPrice((p) => p + addOnStandardRate); setShowAddOnModal(false); setAddOnName(''); }}
+                  onPress={() => {
+                    setAddOnsPrice((p) => p + addOnStandardRate);
+                    // A service add-on is also a task on the job checklist so the
+                    // technician can mark it complete alongside the customer's
+                    // selections. Falls back to a generic label when unnamed.
+                    const label = addOnName.trim() || 'Additional Service';
+                    setChecklist((prev: any[]) => [...prev, { text: label, completed: false }]);
+                    setShowAddOnModal(false);
+                    setAddOnName('');
+                  }}
                   style={{ flex: 1, padding: 12, borderRadius: 12, backgroundColor: '#FF4F8B', alignItems: 'center' }}
                 >
                   <Text style={{ fontSize: 13, fontWeight: '700', color: '#fff' }}>Add</Text>

@@ -238,6 +238,42 @@ export async function fetchTechnicians(
   }));
 }
 
+/**
+ * Fetch a single technician's public profile (used by the order-tracking card
+ * to show the technician's LIVE average rating and review count rather than a
+ * hardcoded default). Returns null when the id is missing or the lookup fails.
+ */
+export async function fetchTechnicianById(
+  technicianId: string
+): Promise<Technician | null> {
+  if (!technicianId) return null;
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, name, avatar_url, rating, reviews_count, work_category, hourly_rate')
+    .eq('id', technicianId)
+    .maybeSingle();
+
+  if (error) {
+    logger.warn('[fetchTechnicianById] lookup failed', {
+      code: (error as any)?.code,
+      message: error.message,
+    });
+    return null;
+  }
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    name: data.name,
+    avatar: data.avatar_url || '',
+    rating: data.rating || 0,
+    reviewsCount: data.reviews_count || 0,
+    specialty: data.work_category || 'all',
+    ratePerHour: data.hourly_rate ? Number(data.hourly_rate) : 45,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Order In Progress
 // ---------------------------------------------------------------------------
@@ -395,6 +431,29 @@ export async function acceptOrderInProgress(
   return data as string | null;
 }
 
+/**
+ * Build the technician task checklist for a job.
+ *
+ * The checklist should surface the items the customer actually selected at
+ * booking time — these are captured as `focus_areas` (the add-on services they
+ * checked in the booking flow). When a job already has persisted checklist rows
+ * (`job_checklists`), those take precedence because they may carry technician-
+ * added tasks or completion state. This seeding is what makes the technician
+ * "Task Checklist" render the customer's selections instead of rendering empty.
+ */
+function buildChecklistFromFocusAreas(
+  focusAreas?: string[] | null,
+  persistedChecklist?: { text: string; completed: boolean }[]
+): { text: string; completed: boolean }[] {
+  if (persistedChecklist && persistedChecklist.length > 0) {
+    return persistedChecklist;
+  }
+  if (!focusAreas || !Array.isArray(focusAreas)) return [];
+  return focusAreas
+    .filter((f) => typeof f === 'string' && f.trim().length > 0)
+    .map((f) => ({ text: f.trim(), completed: false }));
+}
+
 function mapDbOrderToAppJob(row: any): Job {
   return {
     id: row.id,
@@ -421,7 +480,7 @@ function mapDbOrderToAppJob(row: any): Job {
     addOnsPrice: Number(row.add_ons_price) || 0,
     totalPrice: Number(row.total_price) || 0,
     elapsedTime: 0,
-    checklist: [],
+    checklist: buildChecklistFromFocusAreas(row.focus_areas),
     technicianName: row.technician_name,
     technicianAvatar: row.technician_avatar,
     technicianId: row.technician_id,
@@ -605,27 +664,38 @@ export async function fetchServiceCategories(): Promise<ServiceCategory[]> {
 }
 
 // ---------------------------------------------------------------------------
-// Reviews
+// Technician Contact
 // ---------------------------------------------------------------------------
 
-export async function createReview(
-  jobId: string,
-  customerId: string,
-  technicianId: string,
-  rating: number,
-  comment?: string
-): Promise<void> {
-  const { error } = await supabase.from('reviews').insert({
-    job_id: jobId,
-    customer_id: customerId,
-    technician_id: technicianId,
-    rating,
-    comment,
-  });
+/**
+ * Fetch a technician's phone number by their profile id.
+ *
+ * The `profiles_select_authenticated` RLS policy allows any authenticated user
+ * to read profiles (the marketplace needs technician data to be browseable),
+ * so a customer can resolve the phone for the technician assigned to their
+ * order. Returns null when the technician has no phone set or the lookup fails
+ * — callers should treat null as "cannot call" and disable the dial action.
+ */
+export async function fetchTechnicianPhone(
+  technicianId: string
+): Promise<string | null> {
+  if (!technicianId) return null;
 
-  if (error) logAndThrow('createReview', error);
-  // The trg_reviews_update_rating trigger auto-updates the technician's
-  // aggregate rating and review count — no manual sync needed.
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('phone')
+    .eq('id', technicianId)
+    .maybeSingle();
+
+  if (error) {
+    logger.warn('[fetchTechnicianPhone] lookup failed', {
+      code: (error as any)?.code,
+      message: error.message,
+    });
+    return null;
+  }
+
+  return data?.phone ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -658,10 +728,13 @@ function mapDbJobToAppJob(row: any): Job {
     addOnsPrice: Number(row.add_ons_price) || 0,
     totalPrice: Number(row.total_price) || 0,
     elapsedTime: row.elapsed_time || 0,
-    checklist: (row.job_checklists || []).map((c: any) => ({
-      text: c.text,
-      completed: c.completed,
-    })),
+    checklist: buildChecklistFromFocusAreas(
+      row.focus_areas,
+      (row.job_checklists || []).map((c: any) => ({
+        text: c.text,
+        completed: c.completed,
+      }))
+    ),
     materials: (row.job_materials || []).map((m: any) => ({
       name: m.name,
       quantity: m.quantity,

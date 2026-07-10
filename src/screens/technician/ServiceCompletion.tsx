@@ -306,12 +306,16 @@ export default function ServiceCompletion({ route, navigation }: any) {
           <Text style={{ fontSize: 11, fontWeight: '800', color: MUTED, textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 12 }}>
             Checklist Completed
           </Text>
-          {job.checklist.map((item: any, i: number) => (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}>
-              <Ionicons name="checkmark-circle" size={18} color={ACCENT} />
-              <Text style={{ fontSize: 12, color: INK, flex: 1, fontWeight: '500' }}>{item.text}</Text>
-            </View>
-          ))}
+          {job.checklist && job.checklist.length > 0 ? (
+            job.checklist.map((item: any, i: number) => (
+              <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}>
+                <Ionicons name="checkmark-circle" size={18} color={ACCENT} />
+                <Text style={{ fontSize: 12, color: INK, flex: 1, fontWeight: '500' }}>{item.text}</Text>
+              </View>
+            ))
+          ) : (
+            <Text style={{ fontSize: 12, color: MUTED }}>No checklist items for this job.</Text>
+          )}
         </View>
 
         {/* Payment Summary */}

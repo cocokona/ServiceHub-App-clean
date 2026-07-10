@@ -90,6 +90,18 @@ interface LiveTrackingCardProps {
   /** 是否已到达 */
   arrived?: boolean;
   style?: ViewStyle;
+
+  // 实时追踪数据绑定（坐标在屏幕侧喂给 computeEta，isLive 控制 LIVE 脉冲）
+  /** 技师实时纬度（来自 Realtime） */
+  technicianLat?: number;
+  /** 技师实时经度 */
+  technicianLng?: number;
+  /** 客户目的地纬度 */
+  destinationLat?: number;
+  /** 客户目的地经度 */
+  destinationLng?: number;
+  /** 是否已收到首个技师定位（控制 LIVE 徽章与脉冲） */
+  isLive?: boolean;
 }
 
 // ===========================================================================
@@ -426,6 +438,7 @@ const LiveTrackingCard: React.FC<LiveTrackingCardProps> = ({
   journeySteps,
   arrived = false,
   style,
+  isLive = false,
 }) => {
   return (
     <View style={[styles.container, style]}>
@@ -445,7 +458,25 @@ const LiveTrackingCard: React.FC<LiveTrackingCardProps> = ({
         <View style={styles.trackingOverlay}>
           <View style={styles.avatarRow}>
             <PulsingAvatar name={technicianName} avatar={technicianAvatar} />
-            <LiveBadge />
+            {isLive ? (
+              <LiveBadge />
+            ) : (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#CBD5E1',
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 999,
+                  gap: 5,
+                }}
+              >
+                <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>
+                  CONNECTING…
+                </Text>
+              </View>
+            )}
           </View>
           <Text style={styles.techName}>{technicianName}</Text>
           <Text style={styles.techStatus}>

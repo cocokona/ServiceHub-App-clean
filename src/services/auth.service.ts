@@ -45,6 +45,9 @@ function mapToUser(profile: any): User {
     phone: profile.phone ?? undefined,
     hourlyRate: profile.hourly_rate ? Number(profile.hourly_rate) : undefined,
     address: profile.address ?? undefined,
+    apartment: profile.apartment ?? undefined,
+    city: profile.city ?? undefined,
+    zipCode: profile.zip_code ?? undefined,
     rating: profile.rating ? Number(profile.rating) : undefined,
     reviewsCount: profile.reviews_count ?? undefined,
   };
@@ -286,7 +289,12 @@ export async function getCurrentUser(): Promise<User | null> {
  * RLS ensures only the owner can update their own profile.
  */
 export async function updateProfile(
-  updates: Partial<Pick<User, 'name' | 'phone' | 'bio' | 'hourlyRate' | 'address'>>
+  updates: Partial<
+    Pick<
+      User,
+      'name' | 'phone' | 'bio' | 'hourlyRate' | 'address' | 'apartment' | 'city' | 'zipCode'
+    >
+  >
 ): Promise<AuthResult> {
   const {
     data: { session },
@@ -303,6 +311,9 @@ export async function updateProfile(
   if (updates.hourlyRate !== undefined)
     dbUpdates.hourly_rate = updates.hourlyRate;
   if (updates.address !== undefined) dbUpdates.address = updates.address;
+  if (updates.apartment !== undefined) dbUpdates.apartment = updates.apartment;
+  if (updates.city !== undefined) dbUpdates.city = updates.city;
+  if (updates.zipCode !== undefined) dbUpdates.zip_code = updates.zipCode;
 
   const { data: profile, error } = await supabase
     .from('profiles')

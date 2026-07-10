@@ -57,3 +57,12 @@
 - 修复 bug：`enqueueSyncOperation` 优先级被忽略；`flushSyncQueue` 重试耗尽未出队
 - 引入 Vitest，`src/services/__tests__/*.test.ts` 44 用例全过，`tsc --noEmit` 零错误
 - 详见 `BACKEND_REFACTOR.md`
+
+## 2026-07-10 客户支付方式（payment_methods）
+- 表 `payment_methods`（tokenized：brand/last4/exp_month/exp_year/cardholder_name/token/is_default），FK→profiles，RLS 按 `profile_id=auth.uid()` 隔离
+- 服务层 `src/services/payment.service.ts`；**安全铁律**：绝不存完整卡号(PAN)/CVV，仅存 brand+last4+exp+姓名+token；新增卡先本地 Luhn+品牌+有效期+CVV 校验
+- 支付管理 UI 在 `CustomerHome` Profile tab；Checkout 支付选择读取该表
+
+## 2026-07-10 客户评分/评价（reviews）
+- 评价统一走 `src/services/review.service.ts`：`submitReview` 以当前登录用户为 customer_id（RLS），23505→“已评价”提示；`fetchTopReview` 取最高分有文本的评价；DB 触发器 `recalculate_technician_rating`（00001 建、00010 修）在 INSERT 时同步更新 `profiles.rating`/`reviews_count`。
+- `Tracking.tsx` completed 后弹评分卡（星+可选文本）；`CustomerHome` Recommended 显示 top review+平均分+评价数，Home tab 激活重拉。

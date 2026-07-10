@@ -1,6 +1,6 @@
 {
   "methods": [
-    { "key": "credit_card", "label": "Credit Card", "icon": "card-outline", "last4": "4242" },
+    { "key": "credit_card", "label": "Credit Card", "icon": "card-outline" },
     { "key": "digital_wallet", "label": "Digital Wallet", "icon": "wallet-outline" },
     { "key": "cash", "label": "Cash on Delivery", "icon": "cash-outline" }
   ],
