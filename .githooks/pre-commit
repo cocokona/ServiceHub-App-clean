@@ -1,0 +1,19 @@
+#!/bin/sh
+# Pre-commit secret scanning with gitleaks.
+# Blocks a commit if it would introduce a secret into the repository.
+#
+# Enable once (or rely on the `prepare` npm script):
+#   git config core.hooksPath .githooks
+#
+# In CI we rely on the GitHub Action instead, so skip here.
+if [ -n "$CI" ]; then
+  exit 0
+fi
+
+# Scan only the staged changes (what is actually being committed).
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "gitleaks not found locally; running via npx (will download on first use)..."
+  npx --yes gitleaks protect --redact --staged --no-banner
+else
+  gitleaks protect --redact --staged --no-banner
+fi

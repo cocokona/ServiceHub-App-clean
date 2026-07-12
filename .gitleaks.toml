@@ -1,0 +1,21 @@
+# Gitleaks configuration — ServiceHub-App
+# Detects secrets in commits, staged files, and CI.
+# Docs: https://github.com/gitleaks/gitleaks
+
+[extend]
+# Use gitleaks' built-in rule set (AWS, GCP, GitHub, Supabase, JWT, etc.)
+useDefault = true
+
+[allowlist]
+description = "Project-specific false positives (placeholders, generated data, build artifacts)"
+# Path-based allowlists only — no secret values are embedded here.
+paths = [
+  '''\.env\.example$''',
+  '''\.workbuddy/''',
+  '''docs/''',
+  '''src/data/files/''',
+  '''assets/''',
+  '''ios/''',
+  '''\.webp$''',
+  '''package-lock\.json$''',
+]
