@@ -18,6 +18,7 @@ import { getImageUrl, categories, recommendedTechnicians, mockNotifications, cit
 import { PINK, PINK_SOFT, INK, MUTED, ACCENT, ACCENT_SOFT, CANVAS } from '../../theme/colors';
 import { Technician, Job, SavedPaymentMethod, Review } from '../../types';
 import { updateProfile } from '../../services/auth.service';
+import ProfilePictureUploader from '../../components/ProfilePictureUploader';
 import { fetchTechnicians } from '../../services/database.service';
 import { fetchTopReview } from '../../services/review.service';
 import {
@@ -122,6 +123,17 @@ export default memo(function CustomerHome({ route, navigation }: any) {
     navigation.navigate('ServiceDetails', { category, technician });
   };
 
+  // Open the technician's full reviews list. Only meaningful for a real
+  // technician record (mock fallbacks have no id / no reviews to fetch).
+  const openReviews = (technician: Technician) => {
+    if (!technician.id) return;
+    navigation.navigate('TechnicianReviews', {
+      technicianId: technician.id,
+      technicianName: technician.name,
+      technicianAvatar: technician.avatar,
+    });
+  };
+
   const getStatusColorFn = (status: string) => getStatusColor(status, 'customer');
 
   // ---- Payment method management (profile) -------------------------------
@@ -205,6 +217,25 @@ export default memo(function CustomerHome({ route, navigation }: any) {
     }
   };
 
+  // ---- Profile picture (upload / remove) -----------------------------------
+  const handleAvatarUploaded = async (url: string) => {
+    const result = await updateProfile({ avatarUrl: url });
+    if (result.error) {
+      Alert.alert('Error', result.error);
+    } else if (result.user) {
+      setUser(result.user);
+    }
+  };
+
+  const handleAvatarRemoved = async () => {
+    const result = await updateProfile({ avatarUrl: '' });
+    if (result.error) {
+      Alert.alert('Error', result.error);
+    } else if (result.user) {
+      setUser(result.user);
+    }
+  };
+
   // Profile Tab
   if (activeTab === 'profile') {
     return (
@@ -213,11 +244,14 @@ export default memo(function CustomerHome({ route, navigation }: any) {
           <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F172A', marginBottom: 20 }}>Profile</Text>
         <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#FFE2EC', justifyContent: 'center', alignItems: 'center' }}>
-              <Text style={{ fontSize: 24, fontWeight: '700', color: '#FF4F8B' }}>
-                {(user?.name || 'U')[0]}
-              </Text>
-            </View>
+            <ProfilePictureUploader
+              uri={user?.avatarUrl}
+              name={user?.name}
+              size={56}
+              shape="circle"
+              onUploaded={handleAvatarUploaded}
+              onRemove={handleAvatarRemoved}
+            />
             <View>
               <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>{user?.name}</Text>
               <Text style={{ fontSize: 12, color: '#64748B' }}>{user?.email}</Text>
@@ -703,17 +737,20 @@ export default memo(function CustomerHome({ route, navigation }: any) {
         ))}
       </View>
 
-      {/* Recommended Technicians */}
+      {/* Recommended Technicians — two-column card: technician identity on the
+          left, their highest-rated review on the right for visual balance.
+          Cards are full-width (stacked) so the left/right split stays readable
+          even on small screens. */}
       <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A', paddingHorizontal: 20, marginBottom: 12 }}>Recommended</Text>
-      <View style={{ flexDirection: 'row', paddingHorizontal: 16, gap: 12 }}>
+      <View style={{ paddingHorizontal: 16, gap: 12 }}>
         {(technicians.length > 0 ? technicians : recommendedTechnicians).slice(0, 2).map((tech, i) => {
           const top = tech.id ? techTopReviews[tech.id] : undefined;
           return (
-          <TouchableOpacity
+          <View
             key={tech.id || i}
-            onPress={() => startBooking(tech.specialty || 'cleaning', tech)}
             style={{
-              flex: 1,
+              flexDirection: 'row',
+              alignItems: 'stretch',
               backgroundColor: '#fff',
               borderRadius: 16,
               padding: 14,
@@ -726,32 +763,66 @@ export default memo(function CustomerHome({ route, navigation }: any) {
               elevation: 2,
             }}
           >
-            {tech.avatar ? (
-              <Image source={{ uri: tech.avatar }} style={{ width: 48, height: 48, borderRadius: 24, marginBottom: 8 }} />
+            {/* Left column: avatar + name + specialty + rating + rate (tap → book) */}
+            <TouchableOpacity
+              onPress={() => startBooking(tech.specialty || 'cleaning', tech)}
+              activeOpacity={0.8}
+              style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 }}
+            >
+              {tech.avatar ? (
+                <Image source={{ uri: tech.avatar }} style={{ width: 46, height: 46, borderRadius: 23 }} />
+              ) : (
+                <View style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: '#FFE2EC', justifyContent: 'center', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: '#FF4F8B' }}>{tech.name[0]}</Text>
+                </View>
+              )}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={{ fontSize: 13, fontWeight: '700', color: '#0F172A' }}>{tech.name}</Text>
+                <Text numberOfLines={1} style={{ fontSize: 11, color: '#64748B', marginBottom: 4 }}>{tech.specialty}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="star" size={12} color="#f59e0b" />
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: '#0F172A' }}>{tech.rating}</Text>
+                  <Text style={{ fontSize: 10, color: '#94A3B8' }}>({tech.reviewsCount})</Text>
+                </View>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#FF4F8B', marginTop: 2 }}>${tech.ratePerHour}/hr</Text>
+              </View>
+            </TouchableOpacity>
+
+            {/* Vertical divider separating identity from the review */}
+            <View style={{ width: 1, backgroundColor: '#F1F5F9', marginLeft: 12, marginRight: 12 }} />
+
+            {/* Right column: top (highest-rated) review — tappable link to all reviews */}
+            {tech.id ? (
+              <TouchableOpacity
+                onPress={() => openReviews(tech)}
+                activeOpacity={0.7}
+                style={{ flex: 1.15, minWidth: 0, justifyContent: 'center' }}
+              >
+                {top?.comment ? (
+                  <>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <Text style={{ fontSize: 9, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.4 }}>
+                        Top Review
+                      </Text>
+                      <Ionicons name="chevron-forward" size={12} color="#94A3B8" />
+                    </View>
+                    <Text numberOfLines={3} style={{ fontSize: 10, color: '#475569', lineHeight: 14, fontStyle: 'italic' }}>
+                      "{top.comment}"
+                    </Text>
+                    <Text style={{ fontSize: 10, fontWeight: '700', color: '#FF4F8B', marginTop: 4 }}>
+                      See all reviews
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={{ fontSize: 10, color: '#94A3B8', fontStyle: 'italic' }}>No reviews yet</Text>
+                )}
+              </TouchableOpacity>
             ) : (
-              <View style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#FFE2EC', justifyContent: 'center', alignItems: 'center', marginBottom: 8 }}>
-                <Text style={{ fontSize: 18, fontWeight: '700', color: '#FF4F8B' }}>{tech.name[0]}</Text>
+              <View style={{ flex: 1.15, minWidth: 0, justifyContent: 'center' }}>
+                <Text style={{ fontSize: 10, color: '#94A3B8', fontStyle: 'italic' }}>No reviews yet</Text>
               </View>
             )}
-            <Text style={{ fontSize: 13, fontWeight: '700', color: '#0F172A' }}>{tech.name}</Text>
-            <Text style={{ fontSize: 11, color: '#64748B', marginBottom: 6 }}>{tech.specialty}</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-              <Ionicons name="star" size={12} color="#f59e0b" />
-              <Text style={{ fontSize: 11, fontWeight: '600', color: '#0F172A' }}>{tech.rating}</Text>
-              <Text style={{ fontSize: 10, color: '#94A3B8' }}>({tech.reviewsCount})</Text>
-            </View>
-            {top?.comment ? (
-              <View style={{ marginTop: 6, backgroundColor: '#F8FAFC', borderRadius: 8, padding: 8, marginBottom: 6 }}>
-                <Text style={{ fontSize: 9, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 }}>
-                  Top Review
-                </Text>
-                <Text numberOfLines={2} style={{ fontSize: 10, color: '#475569', lineHeight: 14, fontStyle: 'italic' }}>
-                  "{top.comment}"
-                </Text>
-              </View>
-            ) : null}
-            <Text style={{ fontSize: 12, fontWeight: '700', color: '#FF4F8B' }}>${tech.ratePerHour}/hr</Text>
-          </TouchableOpacity>
+          </View>
           );
         })}
       </View>

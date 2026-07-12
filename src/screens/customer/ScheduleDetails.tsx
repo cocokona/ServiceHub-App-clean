@@ -11,7 +11,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { timeSlots, currentLocationDemo, categoryConfig } from '../../data';
+import * as Location from 'expo-location';
+import { timeSlots, categoryConfig } from '../../data';
 import { AppContext } from '../../navigation/AppNavigator';
 import {
   ADDRESS_FIELDS,
@@ -28,11 +29,23 @@ export default function ScheduleDetails({ route, navigation }: any) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [timeSlot, setTimeSlot] = useState('morning');
   // Address fields start EMPTY on load — nothing is pre-filled from the
-  // profile. The only way they get populated is manual entry or the
-  // "Use Current Location" action (which copies the saved profile address
-  // or a sample location on tap).
+  // profile. The only ways they get populated are the two VALID address
+  // sources exposed by the UI below: the customer's saved profile address,
+  // or their live current location (resolved via GPS). The old "sample
+  // location" demo option has been removed entirely.
   const [address, setAddress] = useState<AddressFields>(emptyAddressFields());
+  const [addressSource, setAddressSource] = useState<'none' | 'saved' | 'current'>('none');
+  const [locating, setLocating] = useState(false);
   const [instructions, setInstructions] = useState('');
+
+  // The customer's structured profile address — one of the two accepted
+  // address sources. Used by the "Use My Saved Address" action.
+  const savedAddress = profileToAddressFields(user);
+  const hasSavedAddress = !!(
+    savedAddress.street.trim() ||
+    savedAddress.city.trim() ||
+    savedAddress.zipCode.trim()
+  );
 
   const handleNext = () => {
     const addressCheck = validateAddressFields(address);
@@ -56,27 +69,58 @@ export default function ScheduleDetails({ route, navigation }: any) {
     navigation.navigate('Checkout', { bookingData: updated });
   };
 
-  // "Use Current Location" populates the address from the user's saved profile
-  // address (as an option) or a sample location. Nothing is pre-loaded.
-  const handleUseLocation = () => {
-    const saved = profileToAddressFields(user);
-    const hasSaved = !!(saved.street.trim() || saved.city.trim() || saved.zipCode.trim());
-    const buttons: { text: string; onPress?: () => void; style?: 'cancel' }[] = [];
-    if (hasSaved) {
-      buttons.push({ text: 'Use My Saved Address', onPress: () => setAddress(saved) });
+  // Accepted address source #1: copy the customer's structured profile
+  // address into the form.
+  const handleUseSavedAddress = () => {
+    setAddress(savedAddress);
+    setAddressSource('saved');
+  };
+
+  // Accepted address source #2: resolve the device's live GPS position and
+  // reverse-geocode it into the structured address fields. This is the only
+  // other valid source — the sample/demo location option was removed.
+  const handleUseCurrentLocation = async () => {
+    if (locating) return;
+    setLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location permission required',
+          'Enable location access to use your current location as the service address.'
+        );
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({
+        accuracy: Location.LocationAccuracy.Balanced,
+      });
+      const [place] = await Location.reverseGeocodeAsync({
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      });
+      if (!place) {
+        Alert.alert(
+          'Could not resolve address',
+          'We could not match your current location to a street address. You can enter it manually.'
+        );
+        return;
+      }
+      setAddress({
+        street: [place.streetNumber, place.name].filter(Boolean).join(' ').trim(),
+        apartment: '',
+        city: place.city ?? '',
+        zipCode: place.postalCode ?? '',
+      });
+      setAddressSource('current');
+    } catch (err) {
+      console.error('Failed to resolve current location:', err);
+      Alert.alert(
+        'Location unavailable',
+        'We could not retrieve your current location. Please enter the address manually.'
+      );
+    } finally {
+      setLocating(false);
     }
-    buttons.push({
-      text: 'Use Sample Location',
-      onPress: () =>
-        setAddress({
-          street: currentLocationDemo.street,
-          apartment: '',
-          city: currentLocationDemo.city,
-          zipCode: currentLocationDemo.zipCode,
-        }),
-    });
-    buttons.push({ text: 'Cancel', style: 'cancel' });
-    Alert.alert('Use Current Location', 'Choose an address to use for this service.', buttons);
   };
 
   return (
@@ -155,15 +199,57 @@ export default function ScheduleDetails({ route, navigation }: any) {
           <TextInput value={instructions} onChangeText={setInstructions} placeholder="Gate code, parking, etc." multiline numberOfLines={2} style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13, textAlignVertical: 'top' }} placeholderTextColor="#94A3B8" />
         </View>
 
-        {/* Use Current Location — populates from the saved profile address
-            (as an option) or a sample location. */}
-        <TouchableOpacity
-          onPress={handleUseLocation}
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#FFF1F6', borderRadius: 10, marginBottom: 24 }}
-        >
-          <Ionicons name="location" size={16} color="#FF4F8B" />
-          <Text style={{ fontSize: 12, fontWeight: '600', color: '#FF4F8B' }}>Use Current Location</Text>
-        </TouchableOpacity>
+        {/* Address source actions — the ONLY accepted ways to populate the
+            service address are the customer's saved profile address or their
+            live current location. The "sample location" option was removed.
+            The fields below can still be edited once a source is chosen. */}
+        <View style={{ gap: 10, marginBottom: 24 }}>
+          <TouchableOpacity
+            onPress={handleUseSavedAddress}
+            disabled={!hasSavedAddress}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              padding: 12,
+              backgroundColor: hasSavedAddress ? '#FFF1F6' : '#F8FAFC',
+              borderRadius: 10,
+              opacity: hasSavedAddress ? 1 : 0.6,
+            }}
+          >
+            <Ionicons name="bookmark-outline" size={16} color={hasSavedAddress ? '#FF4F8B' : '#94A3B8'} />
+            <Text style={{ fontSize: 12, fontWeight: '600', color: hasSavedAddress ? '#FF4F8B' : '#94A3B8' }}>
+              {hasSavedAddress ? 'Use My Saved Address' : 'No saved address yet'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handleUseCurrentLocation}
+            disabled={locating}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              padding: 12,
+              backgroundColor: '#FFF1F6',
+              borderRadius: 10,
+              opacity: locating ? 0.6 : 1,
+            }}
+          >
+            <Ionicons name="location" size={16} color="#FF4F8B" />
+            <Text style={{ fontSize: 12, fontWeight: '600', color: '#FF4F8B' }}>
+              {locating ? 'Locating…' : 'Use Current Location'}
+            </Text>
+          </TouchableOpacity>
+
+          {addressSource !== 'none' && (
+            <Text style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+              {addressSource === 'saved'
+                ? 'Service address set from your saved profile.'
+                : 'Service address set from your current location.'}
+            </Text>
+          )}
+        </View>
 
         {/* Summary */}
         <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#F1F5F9' }}>

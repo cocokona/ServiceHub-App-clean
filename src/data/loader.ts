@@ -388,15 +388,6 @@ export const defaultLocation: string = safeGet<string>(
   locationsData.defaultLocation,
   'San Francisco, CA',
 );
-export const currentLocationDemo = safeGet<{
-  street: string;
-  city: string;
-  zipCode: string;
-}>(locationsData.currentLocationDemo, {
-  street: '',
-  city: '',
-  zipCode: '',
-});
 export const daysOfWeek: string[] = safeArray<string>(
   locationsData.daysOfWeek,
   ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],

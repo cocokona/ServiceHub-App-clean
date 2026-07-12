@@ -4,7 +4,6 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   Image,
   Linking,
   Alert,
@@ -16,11 +15,12 @@ import { trackingSteps, getStatusInfo, getStatusIndex } from '../../data';
 import { fetchTechnicianPhone, fetchTechnicianById } from '../../services/database.service';
 import { submitReview, fetchReviewForJob } from '../../services/review.service';
 import { normalizePhoneForDial } from '../../services/validation';
+import RatingModal from '../../components/RatingModal';
 import * as Location from 'expo-location';
 import { subscribeToTechnicianLocation, computeEta } from '../../services/location.service';
 import { openInMaps } from '../../services/mapLink.service';
 import { logger } from '../../services/logger';
-import { PINK, PINK_SOFT, PINK_TINT, INK, MUTED, SUCCESS, MAP_BG, ACCENT, BORDER_LIGHT } from '../../theme/colors';
+import { PINK, PINK_SOFT, PINK_TINT, INK, MUTED, SUCCESS, ACCENT, BORDER_LIGHT } from '../../theme/colors';
 
 export default function Tracking({ route, navigation }: any) {
   const { job } = route.params || {};
@@ -32,13 +32,13 @@ export default function Tracking({ route, navigation }: any) {
   // Real technician rating/review stats (replaces the old hardcoded defaults).
   const [techStats, setTechStats] = useState<{ rating: number; reviewsCount: number } | null>(null);
 
-  // Post-completion rating flow state.
+  // Post-completion rating flow state. The rating UI itself lives in the
+  // RatingModal component; here we only track whether a review already exists
+  // and whether the modal is open.
   const [existingReview, setExistingReview] = useState<Review | null>(null);
-  const [rating, setRating] = useState(0);
-  const [reviewText, setReviewText] = useState('');
+  const [ratingModalVisible, setRatingModalVisible] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [justSubmitted, setJustSubmitted] = useState(false);
 
   // Live-tracking state: technician ping + resolved destination + derived ETA.
   const [techLoc, setTechLoc] = useState<{ lat: number; lng: number } | null>(null);
@@ -107,8 +107,9 @@ export default function Tracking({ route, navigation }: any) {
   };
 
   // Load the technician's LIVE rating/review stats, and (if the order is
-  // complete) whether the customer has already reviewed it. If a review exists
-  // we prefill the form so we never show the rating UI twice.
+  // complete) whether the customer has already reviewed it. If the order is
+  // completed and not yet reviewed, we auto-present the rating modal so this
+  // important step is impossible to miss.
   useEffect(() => {
     let active = true;
     if (!job.technicianId) {
@@ -126,8 +127,9 @@ export default function Tracking({ route, navigation }: any) {
         if (stats) setTechStats({ rating: stats.rating, reviewsCount: stats.reviewsCount });
         if (existing) {
           setExistingReview(existing);
-          setRating(existing.rating);
-          setReviewText(existing.comment || '');
+        } else if (job.status === 'completed') {
+          // Completed but not yet rated — pop the modal automatically.
+          setRatingModalVisible(true);
         }
       })
       .catch((err) =>
@@ -138,9 +140,9 @@ export default function Tracking({ route, navigation }: any) {
     };
   }, [job.technicianId, job.id, job.status]);
 
-  const handleSubmitReview = async () => {
+  const handleSubmitReview = async (ratingValue: number, comment: string) => {
     if (!job.technicianId) return;
-    if (rating < 1) {
+    if (ratingValue < 1) {
       setSubmitError('Please select a star rating.');
       return;
     }
@@ -150,14 +152,18 @@ export default function Tracking({ route, navigation }: any) {
       await submitReview({
         jobId: job.id,
         technicianId: job.technicianId,
-        rating,
-        comment: reviewText,
+        rating: ratingValue,
+        comment,
       });
       // Refresh the technician's live stats so the card above updates
       // immediately after the DB trigger rolls up the new rating.
       const updated = await fetchTechnicianById(job.technicianId);
       if (updated) setTechStats({ rating: updated.rating, reviewsCount: updated.reviewsCount });
-      setJustSubmitted(true);
+      // Re-fetch the saved review (with its DB-generated id/timestamps) so the
+      // modal/button flip to the read-only "Your rating" state.
+      const saved = await fetchReviewForJob(job.id);
+      if (saved) setExistingReview(saved);
+      setRatingModalVisible(false);
     } catch (err: any) {
       setSubmitError(err?.message || 'Could not submit your review.');
     } finally {
@@ -175,9 +181,16 @@ export default function Tracking({ route, navigation }: any) {
     openInMaps(techLoc.lat, techLoc.lng, { label: job.technicianName || 'Technician' });
   };
 
-  const getStatusIndexFn = () => getStatusIndex(job.status);
-
-  const statusIndex = getStatusIndexFn();
+  // Resolve the current journey step from the order status. When the order is
+  // completed we push the index *past* the final step so the whole timeline
+  // renders as finished (every node green) instead of leaving "In Service"
+  // highlighted as the active step. This is defensive against any drift in the
+  // `statusIndex` data mapping.
+  const rawStatusIndex = getStatusIndex(job.status);
+  const statusIndex =
+    job.status === 'completed'
+      ? trackingSteps.length
+      : Math.min(rawStatusIndex, Math.max(trackingSteps.length - 1, 0));
 
   const statusInfo = getStatusInfo(job.status);
 
@@ -198,184 +211,6 @@ export default function Tracking({ route, navigation }: any) {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
-        {/* Live Tracking Map — pastel blue panel */}
-        <View
-          style={{
-            margin: 20,
-            borderRadius: 24,
-            overflow: 'hidden',
-            position: 'relative',
-            backgroundColor: MAP_BG,
-            height: 220,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.06,
-            shadowRadius: 12,
-            elevation: 2,
-          }}
-        >
-          {/* Decorative map illustration */}
-          <View style={{ position: 'absolute', top: 20, left: 20, right: 20, bottom: 20 }}>
-            {/* Soft route line */}
-            <View
-              style={{
-                position: 'absolute',
-                top: 60,
-                left: 30,
-                right: 30,
-                height: 3,
-                backgroundColor: PINK,
-                opacity: 0.4,
-                borderRadius: 2,
-              }}
-            />
-            {/* Origin pin */}
-            <View
-              style={{
-                position: 'absolute',
-                top: 50,
-                left: 20,
-                width: 22,
-                height: 22,
-                borderRadius: 11,
-                backgroundColor: '#fff',
-                borderWidth: 3,
-                borderColor: PINK,
-              }}
-            />
-            {/* Destination pin */}
-            <View
-              style={{
-                position: 'absolute',
-                top: 50,
-                right: 20,
-                width: 22,
-                height: 22,
-                borderRadius: 11,
-                backgroundColor: PINK,
-              }}
-            />
-            <Ionicons
-              name="home"
-              size={11}
-              color="#fff"
-              style={{ position: 'absolute', top: 55, right: 25 }}
-            />
-          </View>
-
-          {/* Pulsing technician avatar (centered) */}
-          <View
-            style={{
-              position: 'absolute',
-              top: '50%',
-              left: '50%',
-              marginLeft: -36,
-              marginTop: -36,
-            }}
-          >
-            {/* Pulse rings */}
-            <View
-              style={{
-                position: 'absolute',
-                width: 96,
-                height: 96,
-                borderRadius: 48,
-                backgroundColor: PINK,
-                opacity: 0.15,
-                top: -12,
-                left: -12,
-              }}
-            />
-            <View
-              style={{
-                position: 'absolute',
-                width: 80,
-                height: 80,
-                borderRadius: 40,
-                backgroundColor: PINK,
-                opacity: 0.25,
-                top: -4,
-                left: -4,
-              }}
-            />
-            <View
-              style={{
-                width: 72,
-                height: 72,
-                borderRadius: 36,
-                backgroundColor: PINK,
-                justifyContent: 'center',
-                alignItems: 'center',
-                borderWidth: 4,
-                borderColor: '#fff',
-                shadowColor: PINK,
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: 0.35,
-                shadowRadius: 12,
-                elevation: 5,
-              }}
-            >
-              <Text style={{ color: '#fff', fontSize: 26, fontWeight: '800' }}>
-                {(job.technicianName || 'M')[0]}
-              </Text>
-            </View>
-          </View>
-
-          {/* LIVE TRACKING pill (top-left) */}
-          <View
-            style={{
-              position: 'absolute',
-              top: 14,
-              left: 14,
-              backgroundColor: PINK,
-              paddingHorizontal: 10,
-              paddingVertical: 5,
-              borderRadius: 999,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 5,
-            }}
-          >
-            <View
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                backgroundColor: '#fff',
-              }}
-            />
-            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800', letterSpacing: 0.5 }}>
-              LIVE TRACKING
-            </Text>
-          </View>
-
-          {/* ETA card (bottom-right) — live once the technician ping arrives */}
-          {techLoc && (
-            <View
-              style={{
-                position: 'absolute',
-                bottom: 14,
-                right: 14,
-                backgroundColor: '#fff',
-                paddingHorizontal: 14,
-                paddingVertical: 10,
-                borderRadius: 14,
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.08,
-                shadowRadius: 8,
-                elevation: 3,
-                alignItems: 'center',
-              }}
-            >
-              <Text style={{ fontSize: 9, color: MUTED, fontWeight: '800', letterSpacing: 0.6 }}>
-                ETA
-              </Text>
-              <Text style={{ fontSize: 18, fontWeight: '800', color: INK, marginTop: 2 }}>{etaText}</Text>
-              <Text style={{ fontSize: 10, color: MUTED, fontWeight: '700', marginTop: 2 }}>{distText} away</Text>
-            </View>
-          )}
-        </View>
 
         {/* Journey Progress — playful timeline */}
         <View
@@ -599,110 +434,36 @@ export default function Tracking({ route, navigation }: any) {
           </View>
         </View>
 
-        {/* Rate your experience — shown after the order is completed */}
+        {/* Rate / view rating — always-visible entry point to the rating modal.
+            For completed, unrated orders the modal also pops automatically. */}
         {job.status === 'completed' && job.technicianId && (
-          <View
+          <TouchableOpacity
+            onPress={() => setRatingModalVisible(true)}
             style={{
               marginHorizontal: 20,
-              backgroundColor: '#fff',
-              borderRadius: 20,
-              padding: 18,
-              borderWidth: 1,
-              borderColor: '#F1F5F9',
               marginBottom: 16,
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 2 },
-              shadowOpacity: 0.04,
-              shadowRadius: 8,
-              elevation: 1,
+              backgroundColor: existingReview ? '#F8FAFC' : PINK_SOFT,
+              borderRadius: 14,
+              paddingVertical: 13,
+              flexDirection: 'row',
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 8,
+              borderWidth: existingReview ? 1 : 0,
+              borderColor: '#F1F5F9',
             }}
+            accessibilityRole="button"
+            accessibilityLabel={existingReview ? 'View your rating' : 'Rate your technician'}
           >
-            <Text style={{ fontSize: 15, fontWeight: '800', color: INK, marginBottom: 4 }}>
-              {justSubmitted || existingReview ? 'Thanks for your feedback!' : 'Rate your experience'}
+            <Ionicons
+              name={existingReview ? 'checkmark-circle' : 'star'}
+              size={16}
+              color={existingReview ? SUCCESS : PINK}
+            />
+            <Text style={{ color: existingReview ? SUCCESS : PINK, fontWeight: '700', fontSize: 13 }}>
+              {existingReview ? 'Your rating' : 'Rate your technician'}
             </Text>
-            <Text style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-              {justSubmitted || existingReview
-                ? 'Your rating helps others choose the right technician.'
-                : `How was your service with ${job.technicianName || 'your technician'}?`}
-            </Text>
-
-            {/* Star selector (1–5) */}
-            <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 8, marginBottom: 14 }}>
-              {[1, 2, 3, 4, 5].map((star) => {
-                const shown = justSubmitted || existingReview ? existingReview?.rating ?? rating : rating;
-                const filled = star <= shown;
-                return (
-                  <TouchableOpacity
-                    key={star}
-                    onPress={() => !justSubmitted && !existingReview && setRating(star)}
-                    disabled={justSubmitted || !!existingReview}
-                    activeOpacity={0.7}
-                  >
-                    <Ionicons
-                      name={filled ? 'star' : 'star-outline'}
-                      size={32}
-                      color={filled ? '#F59E0B' : '#CBD5E1'}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {/* Optional text review (only before submission) */}
-            {!justSubmitted && !existingReview && (
-              <TextInput
-                value={reviewText}
-                onChangeText={setReviewText}
-                placeholder="Add a comment (optional)"
-                placeholderTextColor="#94A3B8"
-                multiline
-                numberOfLines={3}
-                maxLength={500}
-                style={{
-                  borderWidth: 1,
-                  borderColor: '#F1F5F9',
-                  borderRadius: 12,
-                  padding: 12,
-                  fontSize: 13,
-                  color: INK,
-                  textAlignVertical: 'top',
-                  marginBottom: 12,
-                  minHeight: 72,
-                }}
-              />
-            )}
-
-            {submitError && (
-              <Text style={{ fontSize: 12, color: '#EF4444', marginBottom: 10 }}>{submitError}</Text>
-            )}
-
-            {/* Submit button (hidden once a review exists / was just submitted) */}
-            {!justSubmitted && !existingReview && (
-              <TouchableOpacity
-                onPress={handleSubmitReview}
-                disabled={submitting || rating < 1}
-                style={{
-                  backgroundColor: submitting || rating < 1 ? '#FFE2EC' : PINK,
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>
-                  {submitting ? 'Submitting…' : 'Submit Review'}
-                </Text>
-              </TouchableOpacity>
-            )}
-
-            {(justSubmitted || existingReview) && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <Ionicons name="checkmark-circle" size={16} color={SUCCESS} />
-                <Text style={{ fontSize: 12, fontWeight: '600', color: SUCCESS }}>
-                  {existingReview && !justSubmitted ? 'You rated this order' : 'Review submitted'}
-                </Text>
-              </View>
-            )}
-          </View>
+          </TouchableOpacity>
         )}
 
         {/* Service Details */}
@@ -749,6 +510,19 @@ export default function Tracking({ route, navigation }: any) {
           </View>
         </View>
       </ScrollView>
+
+      <RatingModal
+        visible={ratingModalVisible}
+        technicianName={job.technicianName}
+        existingReview={existingReview}
+        submitting={submitting}
+        error={submitError}
+        onSubmit={handleSubmitReview}
+        onClose={() => {
+          setRatingModalVisible(false);
+          setSubmitError(null);
+        }}
+      />
     </SafeAreaView>
   );
 }

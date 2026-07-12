@@ -15,6 +15,7 @@ import ScheduleDetails from '../screens/customer/ScheduleDetails';
 import Checkout from '../screens/customer/Checkout';
 import Tracking from '../screens/customer/Tracking';
 import SupportChat from '../screens/customer/SupportChat';
+import TechnicianReviews from '../screens/customer/TechnicianReviews';
 import TechnicianDashboard from '../screens/technician/TechnicianDashboard';
 import JobDetails from '../screens/technician/JobDetails';
 import ActiveService from '../screens/technician/ActiveService';
@@ -197,6 +198,7 @@ export default function AppNavigator() {
               <Stack.Screen name="Checkout" component={Checkout} />
               <Stack.Screen name="Tracking" component={Tracking} />
               <Stack.Screen name="SupportChat" component={SupportChat} />
+              <Stack.Screen name="TechnicianReviews" component={TechnicianReviews} />
             </>
           ) : (
             <>

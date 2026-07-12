@@ -108,7 +108,7 @@
   },
   "timeSlots": [
     { "key": "morning", "label": "Morning", "time": "8 AM - 12 PM", "icon": "sunny" },
-    { "key": "afterning", "label": "Afternoon", "time": "12 PM - 5 PM", "icon": "partly-sunny" },
+    { "key": "afternoon", "label": "Afternoon", "time": "12 PM - 5 PM", "icon": "partly-sunny" },
     { "key": "evening", "label": "Evening", "time": "5 PM - 9 PM", "icon": "moon" }
   ],
   "defaultTravelFee": 10,

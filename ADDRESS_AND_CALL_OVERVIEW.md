@@ -27,13 +27,14 @@
 - Profile edit renders the 4 address inputs from `ADDRESS_FIELDS`, validates with `validateAddressFields`, and saves structured address.
 - Profile display uses `formatAddress`.
 
-### 5. Order address form — starts empty, Use Current Location = profile
+### 5. Order address form — starts empty, two valid address sources
 `src/screens/customer/ScheduleDetails.tsx`
 - Address inputs render from the same `ADDRESS_FIELDS` and validate with `validateAddressFields`.
 - **Fields start empty on load** — nothing is pre-filled.
-- "Use Current Location" now offers a choice:
+- The service address can only be populated from one of two accepted sources:
   - **Use My Saved Address** — copies the customer's structured profile address.
-  - **Use Sample Location** — the demo address.
+  - **Use Current Location** — resolves the device's live GPS position and reverse-geocodes it into the fields.
+- The old **"Use Sample Location"** demo option (and its `currentLocationDemo` data) has been removed entirely.
 
 ## Consistency guarantee
 Both forms import the SAME `ADDRESS_FIELDS`, `validateAddressFields`, and `formatAddress`.

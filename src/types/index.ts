@@ -102,6 +102,8 @@ export interface User {
   email: string;
   name: string;
   role: 'customer' | 'technician';
+  /** Public URL of the user's profile picture (profiles.avatar_url). */
+  avatarUrl?: string;
   workCategory?: string;
   bio?: string;
   phone?: string;

@@ -40,6 +40,7 @@ function mapToUser(profile: any): User {
     email: profile.email,
     name: profile.name,
     role: profile.role,
+    avatarUrl: profile.avatar_url ?? undefined,
     workCategory: profile.work_category ?? undefined,
     bio: profile.bio ?? undefined,
     phone: profile.phone ?? undefined,
@@ -292,7 +293,15 @@ export async function updateProfile(
   updates: Partial<
     Pick<
       User,
-      'name' | 'phone' | 'bio' | 'hourlyRate' | 'address' | 'apartment' | 'city' | 'zipCode'
+      | 'name'
+      | 'phone'
+      | 'bio'
+      | 'hourlyRate'
+      | 'address'
+      | 'apartment'
+      | 'city'
+      | 'zipCode'
+      | 'avatarUrl'
     >
   >
 ): Promise<AuthResult> {
@@ -305,6 +314,7 @@ export async function updateProfile(
   }
 
   const dbUpdates: Record<string, any> = {};
+  if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
   if (updates.name !== undefined) dbUpdates.name = updates.name;
   if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
   if (updates.bio !== undefined) dbUpdates.bio = updates.bio;

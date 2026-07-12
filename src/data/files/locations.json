@@ -7,11 +7,6 @@
     "Seattle, WA"
   ],
   "defaultLocation": "San Francisco, CA",
-  "currentLocationDemo": {
-    "street": "123 Main St",
-    "city": "San Francisco",
-    "zipCode": "98101"
-  },
   "daysOfWeek": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
   "scheduleSlots": [
     "Morning (8AM-12PM)",

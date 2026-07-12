@@ -47,7 +47,6 @@ export {
   // Locations & schedule
   cities,
   defaultLocation,
-  currentLocationDemo,
   daysOfWeek,
   scheduleSlots,
   // Review tags

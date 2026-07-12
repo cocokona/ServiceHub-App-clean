@@ -120,3 +120,11 @@ export {
   fetchTechnicianStats,
 } from './review.service';
 export type { SubmitReviewInput, TechnicianReviewStats } from './review.service';
+
+// 头像上传（Supabase Storage: avatars 桶，按用户目录隔离 + RLS）
+export {
+  uploadProfilePicture,
+  removeProfilePicture,
+  AVATAR_BUCKET,
+  AVATAR_TARGET_SIZE,
+} from './profilePicture.service';

@@ -18,3 +18,5 @@ export {
   DetailSkeleton,
   InlineSkeleton,
 } from './LoadingSkeleton';
+export { default as ProfilePictureUploader } from './ProfilePictureUploader';
+export { default as PhotoGallerySheet } from './PhotoGallerySheet';

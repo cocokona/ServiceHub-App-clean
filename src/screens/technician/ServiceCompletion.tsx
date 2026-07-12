@@ -113,7 +113,7 @@ export default function ServiceCompletion({ route, navigation }: any) {
               fontWeight: '500',
             }}
           >
-            Marcus finished your deep cleaning. How was it?
+            Technician finished your deep cleaning. How was it?
           </Text>
 
           {/* Stars */}

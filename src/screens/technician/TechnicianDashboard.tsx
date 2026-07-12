@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { AppContext } from '../../navigation/AppNavigator';
 import { Job } from '../../types';
 import { updateProfile } from '../../services/auth.service';
+import ProfilePictureUploader from '../../components/ProfilePictureUploader';
 import { validateTechnicianAcceptProfile } from '../../services/validation';
 import { fetchAllOrdersInProgress, acceptOrderInProgress, fetchTechnicianAvailability, setTechnicianAvailability } from '../../services/database.service';
 import { scheduleSlots, technicianFilters, getStatusColor } from '../../data';
@@ -170,6 +171,24 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
     }
   };
 
+  const handleAvatarUploaded = async (url: string) => {
+    const result = await updateProfile({ avatarUrl: url });
+    if (result.error) {
+      Alert.alert('Error', result.error);
+    } else if (result.user) {
+      setUser(result.user);
+    }
+  };
+
+  const handleAvatarRemoved = async () => {
+    const result = await updateProfile({ avatarUrl: '' });
+    if (result.error) {
+      Alert.alert('Error', result.error);
+    } else if (result.user) {
+      setUser(result.user);
+    }
+  };
+
   const handleSaveProfile = async () => {
     // Technicians must keep a phone number on file (required to accept orders).
     if (user?.role === 'technician' && !phone.trim()) {
@@ -205,9 +224,16 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
 
         <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#F1F5F9', borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-            <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: '#FF4F8B', justifyContent: 'center', alignItems: 'center' }}>
-              <Ionicons name="construct" size={24} color="#FFFFFF" />
-            </View>
+            <ProfilePictureUploader
+              uri={user?.avatarUrl}
+              name={user?.name}
+              size={56}
+              shape="circle"
+              fallbackIcon="construct"
+              editButtonColor="#FF4F8B"
+              onUploaded={handleAvatarUploaded}
+              onRemove={handleAvatarRemoved}
+            />
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>{user?.name}</Text>
               <Text style={{ fontSize: 12, color: '#64748B' }}>{user?.workCategory || 'All Services'}</Text>
