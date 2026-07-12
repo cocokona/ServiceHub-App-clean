@@ -35,6 +35,9 @@ yarn-error.*
 .env*.local
 # .env.example IS tracked — it is the template for developers
 
+# internal WorkBuddy notes / screenshots — not part of the public source
+.workbuddy/
+
 # typescript
 *.tsbuildinfo
 
