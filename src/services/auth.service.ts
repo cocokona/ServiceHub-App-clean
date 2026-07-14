@@ -2,6 +2,14 @@ import { supabase } from '../lib/supabase';
 import type { User } from '../types';
 import { logger } from './logger';
 import { ensureProfile } from './database.service';
+import {
+  validateDisplayName,
+  normalizePhone,
+  phoneUniquenessErrorMessage,
+  type ProfileRole,
+} from './validation';
+import { checkPhoneUniquenessWithinRole } from './phone.service';
+import { isUniqueViolation } from './errors';
 
 /**
  * Auth Service — Refactored
@@ -316,7 +324,37 @@ export async function updateProfile(
   const dbUpdates: Record<string, any> = {};
   if (updates.avatarUrl !== undefined) dbUpdates.avatar_url = updates.avatarUrl;
   if (updates.name !== undefined) dbUpdates.name = updates.name;
-  if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
+
+  // Phone uniqueness is scoped per role group: a customer and a technician may
+  // share a number, but no two profiles of the same role may. We normalize
+  // (trim) before storing so the stored value matches what the DB partial
+  // unique index compares against.
+  let myRole: ProfileRole = 'customer';
+  if (updates.phone !== undefined) {
+    const newPhone = normalizePhone(updates.phone);
+    dbUpdates.phone = newPhone;
+
+    if (newPhone) {
+      // Resolve the caller's role so the uniqueness rule is scoped to their
+      // own role group (cross-role overlap is explicitly allowed).
+      const { data: me } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      myRole = me?.role === 'technician' ? 'technician' : 'customer';
+
+      const dup = await checkPhoneUniquenessWithinRole({
+        phone: newPhone,
+        role: myRole,
+        excludeProfileId: session.user.id,
+      });
+      if (dup.isDuplicate) {
+        return { user: null, error: phoneUniquenessErrorMessage(myRole) };
+      }
+    }
+  }
+
   if (updates.bio !== undefined) dbUpdates.bio = updates.bio;
   if (updates.hourlyRate !== undefined)
     dbUpdates.hourly_rate = updates.hourlyRate;
@@ -333,10 +371,79 @@ export async function updateProfile(
     .single();
 
   if (error || !profile) {
+    // The DB partial unique index (migration 00018) is the authoritative
+    // backstop. If a concurrent write introduced a same-role duplicate between
+    // our pre-check and the update, translate the raw 23505 into the same
+    // friendly, role-aware message the pre-check would have shown.
+    if (isUniqueViolation(error)) {
+      logger.warn('[auth:updateProfile] phone uniqueness violation', {
+        code: (error as any)?.code,
+      });
+      return { user: null, error: phoneUniquenessErrorMessage(myRole) };
+    }
     logger.error('[auth:updateProfile] update failed', { code: (error as any)?.status });
     return { user: null, error: error?.message ?? 'Update failed' };
   }
 
   logger.info('[auth:updateProfile] profile updated');
+  return { user: mapToUser(profile), error: null };
+}
+
+/**
+ * Update only the user's display name.
+ *
+ * Flow:
+ *  1. Validate the raw input with `validateDisplayName` (single source of
+ *     truth shared with the UI). A validation failure is returned as a
+ *     friendly `error` without touching the database — never surface the
+ *     raw rule to the user.
+ *  2. Write `profiles.name` via Supabase. RLS restricts the update to the
+ *     authenticated owner (`id = auth.uid()`), so a user can only rename
+ *     themselves.
+ *  3. On success return the refreshed `User` (mapped from the DB row) so the
+ *     caller can push it into app-wide state for instant cross-screen sync.
+ *
+ * The caller MUST await this and only reflect the change in the UI after a
+ * successful result — i.e. the database is treated as the source of truth and
+ * the local UI is updated last. On any failure `user` is null and `error`
+ * carries a safe, user-facing message.
+ */
+export async function updateDisplayName(
+  rawName: string | null | undefined
+): Promise<AuthResult> {
+  const validation = validateDisplayName(rawName);
+  if (!validation.isValid) {
+    return { user: null, error: validation.error ?? 'Invalid name.' };
+  }
+
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
+  if (!session?.user) {
+    return {
+      user: null,
+      error: 'Your session has expired. Please sign in again.',
+    };
+  }
+
+  const { data: profile, error } = await supabase
+    .from('profiles')
+    .update({ name: validation.normalized })
+    .eq('id', session.user.id)
+    .select('*')
+    .single();
+
+  if (error || !profile) {
+    logger.error('[auth:updateDisplayName] update failed', {
+      code: (error as any)?.status,
+    });
+    return {
+      user: null,
+      error: error?.message ?? 'Could not update your name. Please try again.',
+    };
+  }
+
+  logger.info('[auth:updateDisplayName] display name updated');
   return { user: mapToUser(profile), error: null };
 }

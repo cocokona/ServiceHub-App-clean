@@ -52,6 +52,10 @@ export interface TimeSlot {
   label: string;
   time: string;
   icon: string;
+  /** Inclusive start of the slot window, in 24h local time (e.g. 8 = 8 AM). */
+  startHour?: number;
+  /** Exclusive end of the slot window, in 24h local time (e.g. 17 = 5 PM). */
+  endHour?: number;
 }
 
 export interface PaymentMethod {

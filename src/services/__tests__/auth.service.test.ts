@@ -60,6 +60,16 @@ describe('auth.service', () => {
     hoisted.supabase.from.mockReturnValue(makeBuilder({ data: profile, error: null }));
   }
 
+  // Returns queued results one-per-`from()` call (round-robin). Needed because
+  // updateProfile may issue several sequential queries (role lookup, duplicate
+  // check, then the update itself).
+  function mockSequence(results: { data: any; error: any }[]) {
+    const queue = [...results];
+    hoisted.supabase.from.mockImplementation(() =>
+      makeBuilder(queue.length ? queue.shift()! : { data: null, error: null })
+    );
+  }
+
   it('signUp returns a mapped user on success (with session + profile)', async () => {
     hoisted.supabase.auth.signUp.mockResolvedValue({
       data: { user: { id: 'u1' }, session: {} },
@@ -139,5 +149,83 @@ describe('auth.service', () => {
     hoisted.supabase.auth.signOut.mockResolvedValue(undefined);
     await signOut();
     expect(hoisted.supabase.auth.signOut).toHaveBeenCalled();
+  });
+
+  it('updateProfile blocks a phone already used by another customer (same role)', async () => {
+    hoisted.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'u1' } } },
+      error: null,
+    });
+    // 1) role lookup -> customer; 2) duplicate check -> another customer found.
+    mockSequence([
+      { data: { role: 'customer' }, error: null },
+      { data: { id: 'u2' }, error: null },
+    ]);
+
+    const res = await updateProfile({ phone: '555-0101' });
+
+    expect(res.user).toBeNull();
+    expect(res.error).toContain('This phone number is already used by other');
+    expect(res.error).toContain('cancel the last account first');
+  });
+
+  it('updateProfile allows a phone used by a technician when the user is a customer (cross-role overlap)', async () => {
+    hoisted.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'u1' } } },
+      error: null,
+    });
+    // 1) role lookup -> customer; 2) no *customer* has this phone; 3) update ok.
+    mockSequence([
+      { data: { role: 'customer' }, error: null },
+      { data: null, error: null },
+      { data: { id: 'u1', email: 'a@b.com', name: 'Al', role: 'customer', phone: '555-0101' }, error: null },
+    ]);
+
+    const res = await updateProfile({ phone: '555-0101' });
+
+    expect(res.error).toBeNull();
+    expect(res.user?.phone).toBe('555-0101');
+  });
+
+  it('updateProfile allows clearing the phone (empty/whitespace) without a uniqueness check', async () => {
+    hoisted.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'u1' } } },
+      error: null,
+    });
+    // Only the update call happens (empty phone -> no role lookup, no dup check).
+    hoisted.supabase.from.mockReturnValue(
+      makeBuilder({ data: { id: 'u1', email: 'a@b.com', name: 'Al', role: 'customer', phone: '' }, error: null }),
+    );
+
+    const res = await updateProfile({ phone: '   ' });
+
+    expect(res.error).toBeNull();
+    expect(res.user?.phone).toBe('');
+  });
+
+  it('maps a DB unique-violation (23505) to the friendly, role-aware message', async () => {
+    hoisted.supabase.auth.getSession.mockResolvedValue({
+      data: { session: { user: { id: 'u1' } } },
+      error: null,
+    });
+    // 1) role -> customer; 2) pre-check missed it (e.g. race); 3) update 23505.
+    mockSequence([
+      { data: { role: 'customer' }, error: null },
+      { data: null, error: null },
+      {
+        data: null,
+        error: {
+          code: '23505',
+          message:
+            'duplicate key value violates unique constraint "idx_profiles_customer_phone_unique"',
+        },
+      },
+    ]);
+
+    const res = await updateProfile({ phone: '555-0101' });
+
+    expect(res.user).toBeNull();
+    expect(res.error).toContain('This phone number is already used by other');
+    expect(res.error).toContain('cancel the last account first');
   });
 });

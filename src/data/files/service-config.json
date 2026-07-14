@@ -107,9 +107,9 @@
     }
   },
   "timeSlots": [
-    { "key": "morning", "label": "Morning", "time": "8 AM - 12 PM", "icon": "sunny" },
-    { "key": "afternoon", "label": "Afternoon", "time": "12 PM - 5 PM", "icon": "partly-sunny" },
-    { "key": "evening", "label": "Evening", "time": "5 PM - 9 PM", "icon": "moon" }
+    { "key": "morning", "label": "Morning", "time": "8 AM - 12 PM", "icon": "sunny", "startHour": 8, "endHour": 12 },
+    { "key": "afternoon", "label": "Afternoon", "time": "12 PM - 5 PM", "icon": "partly-sunny", "startHour": 12, "endHour": 17 },
+    { "key": "evening", "label": "Evening", "time": "5 PM - 9 PM", "icon": "moon", "startHour": 17, "endHour": 21 }
   ],
   "defaultTravelFee": 10,
   "defaultTax": 0

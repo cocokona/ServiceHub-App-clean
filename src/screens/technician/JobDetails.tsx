@@ -14,18 +14,32 @@ import { AppContext } from '../../navigation/AppNavigator';
 import { Job } from '../../types';
 import { technicianSharePercent } from '../../data';
 import { normalizePhoneForDial } from '../../services/validation';
+import { shouldRevealEarnings } from '../../services/jobStatus';
 import * as Location from 'expo-location';
 import { startLocationSharing } from '../../services/location.service';
 import { openInMaps } from '../../services/mapLink.service';
 
 export default function JobDetails({ route, navigation }: any) {
   const { job } = route.params || {};
-  const { updateJobStatus, user } = useContext(AppContext);
+  const { updateJobStatus, user, startServiceTimer } = useContext(AppContext);
   if (!job) return null;
 
   const estimatedEarnings = (job.totalPrice * technicianSharePercent / 100).toFixed(2);
 
+  // Open the technician's own profile (Tab screen) from this stacked order page.
+  const handleOpenProfile = () => {
+    try {
+      navigation.navigate('TechnicianTabs', { screen: 'Profile' });
+    } catch {
+      navigation.navigate('Profile');
+    }
+  };
+
   const handleStartJob = async () => {
+    // Begin counting elapsed time the moment the job starts, then proceed
+    // straight to Active Service. (No arrival-confirm popup: the timer itself
+    // is what marks the start, so an extra confirmation would be redundant.)
+    startServiceTimer(job.id);
     updateJobStatus(job.id, { status: 'in_progress' });
     navigation.navigate('ActiveService', { job: { ...job, status: 'in_progress' } });
     // Start live location sharing (fire-and-forget). If the user denies
@@ -71,7 +85,31 @@ export default function JobDetails({ route, navigation }: any) {
         <TouchableOpacity onPress={() => navigation.goBack()} style={{ marginRight: 12 }}>
           <Ionicons name="arrow-back" size={22} color="#0F172A" />
         </TouchableOpacity>
-        <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A' }}>Job Details</Text>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: '#0F172A', flex: 1 }}>Job Details</Text>
+
+        {/* Top-right icon cluster: profile + chat, styled identically for cohesion */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <TouchableOpacity
+            onPress={handleOpenProfile}
+            activeOpacity={0.8}
+            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFF1F6', justifyContent: 'center', alignItems: 'center', overflow: 'hidden' }}
+          >
+            {user?.avatarUrl ? (
+              <Image source={{ uri: user.avatarUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+            ) : (
+              <Ionicons name="person" size={18} color="#FF4F8B" />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('SupportChat', { job })}
+            activeOpacity={0.82}
+            accessibilityLabel="Contact customer service"
+            accessibilityRole="button"
+            style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FF4F8B', justifyContent: 'center', alignItems: 'center', shadowColor: '#FF4F8B', shadowOpacity: 0.35, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 5 }}
+          >
+            <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 120 }}>
@@ -82,10 +120,17 @@ export default function JobDetails({ route, navigation }: any) {
               <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A' }}>{job.serviceType}</Text>
               <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{job.jobCode || job.id} - {job.rooms}</Text>
             </View>
-            <View style={{ backgroundColor: '#FFE2EC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
-              <Text style={{ fontSize: 14, fontWeight: '800', color: '#FF4F8B' }}>${estimatedEarnings}</Text>
-              <Text style={{ fontSize: 9, color: '#FF4F8B', textAlign: 'center' }}>est. earnings</Text>
-            </View>
+            {shouldRevealEarnings(job) ? (
+              <View style={{ backgroundColor: '#FFE2EC', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: '#FF4F8B' }}>${estimatedEarnings}</Text>
+                <Text style={{ fontSize: 9, color: '#FF4F8B', textAlign: 'center' }}>est. earnings</Text>
+              </View>
+            ) : (
+              <View style={{ backgroundColor: '#F1F5F9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Ionicons name="lock-closed-outline" size={12} color="#94A3B8" />
+                <Text style={{ fontSize: 10, fontWeight: '600', color: '#94A3B8' }}>after completion</Text>
+              </View>
+            )}
           </View>
           <View style={{ flexDirection: 'row', gap: 12, flexWrap: 'wrap' }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -116,21 +161,7 @@ export default function JobDetails({ route, navigation }: any) {
             )}
           <View style={{ flex: 1 }}>
             <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A' }}>{job.customerName}</Text>
-            <Text style={{ fontSize: 12, color: '#64748B' }}>{job.customerPhone || 'No phone provided'}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <TouchableOpacity
-              onPress={handleCallCustomer}
-              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFF1F6', justifyContent: 'center', alignItems: 'center' }}
-            >
-              <Ionicons name="call" size={16} color="#FF4F8B" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => navigation.navigate('SupportChat', { job })}
-              style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#FFF1F6', justifyContent: 'center', alignItems: 'center' }}
-            >
-              <Ionicons name="chatbubble" size={16} color="#FF4F8B" />
-            </TouchableOpacity>
+            <Text style={{ fontSize: 12, color: '#94A3B8' }}>Phone number private</Text>
           </View>
         </View>
 
@@ -152,9 +183,6 @@ export default function JobDetails({ route, navigation }: any) {
         >
           <Ionicons name="call" size={18} color="#fff" />
           <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>Call Customer</Text>
-          <Text style={{ color: 'rgba(255,255,255,0.9)', fontSize: 12 }}>
-            {job.customerPhone || 'No number'}
-          </Text>
         </TouchableOpacity>
         </View>
 

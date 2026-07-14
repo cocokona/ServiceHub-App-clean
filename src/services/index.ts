@@ -104,12 +104,24 @@ export {
 } from './address';
 export type { AddressFields, AddressFieldConfig, AddressValidation } from './address';
 
-// 资料校验（下单地址 + 电话、接单电话、拨号归一化）
+// 资料校验（下单地址 + 电话、接单电话、拨号归一化、显示名、电话唯一性）
 export {
   validateCustomerOrderProfile,
   validateTechnicianAcceptProfile,
+  validateTechnicianCanAcceptJob,
   normalizePhoneForDial,
+  validateDisplayName,
+  DISPLAY_NAME_MIN,
+  DISPLAY_NAME_MAX,
+  normalizePhone,
+  validatePhoneUniqueness,
+  phoneUniquenessErrorMessage,
 } from './validation';
+export type { ProfileRole, PhoneUniquenessValidation } from './validation';
+
+// 电话唯一性（按角色分组：同角色不可重复，跨角色允许重叠）
+export { checkPhoneUniquenessWithinRole } from './phone.service';
+export type { PhoneUniquenessCheck } from './phone.service';
 
 // 评价（订单完成后客户对技师打分 + 文本评价，服务端触发器实时汇总）
 export {
@@ -128,3 +140,14 @@ export {
   AVATAR_BUCKET,
   AVATAR_TARGET_SIZE,
 } from './profilePicture.service';
+
+// 自动取消（30 分钟内未被技师接单的「当天」订单）
+export {
+  AUTO_CANCEL_TIMEOUT_MINUTES,
+  isSameDayOrder,
+  getAutoCancelDeadline,
+  isAutoCancelEligible,
+  getAutoCancelRemainingMs,
+  autoCancelUnacceptedOrders,
+} from './autoCancel.service';
+export type { AutoCancelOrderInput } from './autoCancel.service';

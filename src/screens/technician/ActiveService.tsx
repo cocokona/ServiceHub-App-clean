@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useCallback, useContext } from 'react';
 import {
   View,
   Text,
@@ -17,16 +17,39 @@ import { stopLocationSharing } from '../../services/location.service';
 
 export default function ActiveService({ route, navigation }: any) {
   const { job } = route.params || {};
-  const { updateJobStatus } = useContext(AppContext);
-  const [seconds, setSeconds] = useState(job?.elapsedTime || 0);
+  const { updateJobStatus, startServiceTimer, getServiceElapsed, clearServiceTimer, getServiceChecklist, setServiceChecklist } = useContext(AppContext);
+  // Seed from the central start timestamp so the counter resumes exactly where
+  // it left off after navigating back — falling back to a persisted elapsedTime
+  // (e.g. a job resumed from a prior session) when no live timer is running.
+  const [seconds, setSeconds] = useState(() =>
+    getServiceElapsed(job?.id) || job?.elapsedTime || 0
+  );
   // Seed the checklist from the job's persisted checklist (now derived from the
   // customer's selected add-on services) and fall back to the selected
   // focusAreas if, for any reason, the job carries no checklist yet.
-  const initialChecklist =
-    job?.checklist && job.checklist.length > 0
-      ? job.checklist
-      : (job?.focusAreas || []).map((f: string) => ({ text: f, completed: false }));
-  const [checklist, setChecklist] = useState(initialChecklist);
+  const deriveInitialChecklist = useCallback((): { text: string; completed: boolean }[] => {
+    if (job?.checklist && job.checklist.length > 0) return job.checklist;
+    return (job?.focusAreas || []).map((f: string) => ({ text: f, completed: false }));
+  }, [job?.checklist, job?.focusAreas]);
+
+  // Seed from the navigation-persistent store when we have already tracked this
+  // job (e.g. after navigating away and back), otherwise from the job's own
+  // checklist/focus areas. Keeping the live progress in AppContext — a ref
+  // keyed by job id — is what lets the ticked items survive a goBack + re-enter
+  // cycle that would otherwise throw away the component's local state.
+  const [checklist, setChecklist] = useState<{ text: string; completed: boolean }[]>(() => {
+    const stored = getServiceChecklist(job?.id);
+    if (stored && stored.length > 0) return stored;
+    return deriveInitialChecklist();
+  });
+
+  // Mirror every checklist change into the persistent store so the selection is
+  // restored on the next visit. This also primes the store on first mount with
+  // the derived seed, and re-persists whenever the technician toggles an item
+  // or adds a service add-on.
+  useEffect(() => {
+    setServiceChecklist(job?.id, checklist);
+  }, [job?.id, checklist, setServiceChecklist]);
   const [showAddOnModal, setShowAddOnModal] = useState(false);
   const [addOnName, setAddOnName] = useState('');
   const [addOnsPrice, setAddOnsPrice] = useState(0);
@@ -34,9 +57,15 @@ export default function ActiveService({ route, navigation }: any) {
   const [showOptions, setShowOptions] = useState(false);
 
   useEffect(() => {
-    const interval = setInterval(() => setSeconds((s: number) => s + 1), 1000);
+    // Ensure a running timer exists (idempotent) — this also covers any path
+    // that lands on Active Service without going through the Start Job confirm.
+    if (job?.id && job?.status === 'in_progress') startServiceTimer(job.id);
+    // Re-derive elapsed every second from the central start timestamp rather
+    // than incrementing a local counter, so the clock keeps counting in real
+    // time even across unmount/remount when the technician navigates back.
+    const interval = setInterval(() => setSeconds(getServiceElapsed(job?.id)), 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [job?.id, job?.status, getServiceElapsed, startServiceTimer]);
 
   useEffect(() => {
     setTotalPrice((job?.totalPrice || 0) + addOnsPrice);
@@ -58,11 +87,15 @@ export default function ActiveService({ route, navigation }: any) {
   };
 
   const handleComplete = () => {
+    // Read the authoritative elapsed value from the central timer so it is
+    // accurate to the second even if the display tick lagged slightly.
+    const elapsed = getServiceElapsed(job.id);
     stopLocationSharing(); // stop live sharing when the job ends
-    updateJobStatus(job.id, { status: 'completed', elapsedTime: seconds, addOnsPrice, totalPrice });
+    clearServiceTimer(job.id); // stop counting; the job is done
+    updateJobStatus(job.id, { status: 'completed', elapsedTime: elapsed, addOnsPrice, totalPrice });
     // Carry the live checklist (including any add-ons added during the visit)
     // into the completion summary so it reflects every task performed.
-    navigation.navigate('ServiceCompletion', { job: { ...job, status: 'completed', elapsedTime: seconds, addOnsPrice, totalPrice, checklist } });
+    navigation.navigate('ServiceCompletion', { job: { ...job, status: 'completed', elapsedTime: elapsed, addOnsPrice, totalPrice, checklist } });
   };
 
   return (

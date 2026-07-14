@@ -17,9 +17,12 @@ import { AppContext } from '../../navigation/AppNavigator';
 import { Job } from '../../types';
 import { updateProfile } from '../../services/auth.service';
 import ProfilePictureUploader from '../../components/ProfilePictureUploader';
-import { validateTechnicianAcceptProfile } from '../../services/validation';
+import DisplayNameEditor from '../../components/DisplayNameEditor';
+import SupportLauncher from '../../components/SupportLauncher';
+import { validateTechnicianAcceptProfile, validateTechnicianCanAcceptJob } from '../../services/validation';
 import { fetchAllOrdersInProgress, acceptOrderInProgress, fetchTechnicianAvailability, setTechnicianAvailability } from '../../services/database.service';
-import { scheduleSlots, technicianFilters, getStatusColor } from '../../data';
+import { scheduleSlots, technicianFilters, getStatusColor, technicianSharePercent } from '../../data';
+import { isJobCompleted, computeTechnicianEarnings } from '../../services/jobStatus';
 
 export default memo(function TechnicianDashboard({ route, navigation }: any) {
   const { user, setUser, jobs, logout, updateJobStatus, refreshJobs } = useContext(AppContext);
@@ -121,7 +124,11 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
   const fetchPendingOrders = async () => {
     setLoadingPending(true);
     try {
-      const orders = await fetchAllOrdersInProgress();
+      // Only surface jobs the technician is permitted to take, based on their
+      // specialty. A 'repair' tech sees repair jobs; a universal ('all') tech
+      // sees every category. This keeps incompatible jobs (e.g. a repair tech
+      // viewing a cleaning job) out of the browse list entirely.
+      const orders = await fetchAllOrdersInProgress(user?.workCategory);
       setPendingOrders(orders);
     } catch (err) {
       console.error('Failed to fetch pending orders:', err);
@@ -137,7 +144,10 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
   }, [activeTab]);
 
   // Accept an order — moves it from order_in_progress to jobs
-  const handleAcceptOrder = async (orderId: string) => {
+  const handleAcceptOrder = async (
+    orderId: string,
+    serviceCategory?: Job['serviceCategory']
+  ) => {
     if (!user?.id) return;
 
     // Enforce mandatory technician phone before accepting an order. Customers
@@ -152,6 +162,24 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
           { text: 'Edit Profile', onPress: () => navigation.navigate('Profile') },
           { text: 'Cancel', style: 'cancel' },
         ]
+      );
+      return;
+    }
+
+    // Role/permission gate: a technician may only accept jobs whose category
+    // matches their specialty. Universal ('all') technicians may take any job.
+    // This prevents a repair technician from accepting a cleaning job (and the
+    // DB `accept_order_in_progress` function enforces the same rule server-side
+    // as a backstop against client bypass).
+    const categoryCheck = validateTechnicianCanAcceptJob({
+      technicianWorkCategory: user?.workCategory,
+      jobServiceCategory: serviceCategory,
+    });
+    if (!categoryCheck.isValid) {
+      Alert.alert(
+        'Cannot Accept This Job',
+        categoryCheck.reason ||
+          'You are not permitted to accept this type of job.'
       );
       return;
     }
@@ -219,8 +247,10 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#FAFBFC' }}>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F172A', marginBottom: 20 }}>Profile</Text>
-        <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F172A', marginBottom: 20 }}>Profile</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F172A' }}>Profile</Text>
+            <SupportLauncher />
+          </View>
 
         <View style={{ backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#F1F5F9', borderBottomWidth: 1, borderBottomColor: '#F1F5F9', marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
@@ -276,6 +306,11 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
             </View>
           )}
         </View>
+
+        {/* Dedicated, validated display-name editor. Owns its own DB-first
+            update + cross-app sync (via setUser) so the name stays consistent
+            everywhere it is shown in the app. */}
+        <DisplayNameEditor user={user} onSaved={setUser} />
 
         <TouchableOpacity onPress={logout} style={{ borderWidth: 1, borderColor: '#FEF2F2', borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <Ionicons name="log-out-outline" size={16} color="#EF4444" />
@@ -356,7 +391,7 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 }}>
                     <Text style={{ fontSize: 18, fontWeight: '800', color: '#FF4F8B' }}>${order.totalPrice.toFixed(2)}</Text>
                     <TouchableOpacity
-                      onPress={() => handleAcceptOrder(order.id)}
+                      onPress={() => handleAcceptOrder(order.id, order.serviceCategory)}
                       disabled={acceptingId === order.id}
                       style={{
                         backgroundColor: acceptingId === order.id ? '#FFE2EC' : '#FF4F8B',
@@ -495,7 +530,17 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
       <View style={{ flexDirection: 'row', gap: 10, marginBottom: 20 }}>
         {[
           { label: 'Jobs', value: jobs.length.toString(), icon: 'briefcase' as const },
-          { label: 'Earnings', value: `$${jobs.reduce((s, j) => s + j.totalPrice, 0).toFixed(0)}`, icon: 'cash' as const },
+          // Earnings are revealed ONLY for completed jobs — never for pending,
+          // in-progress, or cancelled work. This is the aggregate form of the
+          // per-job earnings-visibility rule (see src/services/jobStatus.ts).
+          {
+            label: 'Earnings',
+            value: `$${jobs
+              .filter((j) => isJobCompleted(j.status))
+              .reduce((s, j) => s + computeTechnicianEarnings(j.totalPrice, technicianSharePercent), 0)
+              .toFixed(0)}`,
+            icon: 'cash' as const,
+          },
         ].map((stat) => (
           <View key={stat.label} style={{ flex: 1, backgroundColor: '#FFFFFF', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: '#F1F5F9', alignItems: 'center', gap: 4 }}>
             <Ionicons name={stat.icon} size={18} color="#FF4F8B" />

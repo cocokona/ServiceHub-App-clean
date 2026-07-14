@@ -19,6 +19,8 @@ import { PINK, PINK_SOFT, INK, MUTED, ACCENT, ACCENT_SOFT, CANVAS } from '../../
 import { Technician, Job, SavedPaymentMethod, Review } from '../../types';
 import { updateProfile } from '../../services/auth.service';
 import ProfilePictureUploader from '../../components/ProfilePictureUploader';
+import DisplayNameEditor from '../../components/DisplayNameEditor';
+import SupportLauncher from '../../components/SupportLauncher';
 import { fetchTechnicians } from '../../services/database.service';
 import { fetchTopReview } from '../../services/review.service';
 import {
@@ -62,7 +64,6 @@ export default memo(function CustomerHome({ route, navigation }: any) {
   const [searchQuery, setSearchQuery] = useState('');
   const [notifications] = useState(mockNotifications);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [profileName, setProfileName] = useState(user?.name || '');
   const [profilePhone, setProfilePhone] = useState(user?.phone || '');
   const [addr, setAddr] = useState<AddressFields>(profileToAddressFields(user));
   const [editingProfile, setEditingProfile] = useState(false);
@@ -241,7 +242,10 @@ export default memo(function CustomerHome({ route, navigation }: any) {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: '#FAFBFC' }}>
         <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 40 }}>
-          <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F172A', marginBottom: 20 }}>Profile</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <Text style={{ fontSize: 24, fontWeight: '800', color: '#0F172A' }}>Profile</Text>
+            <SupportLauncher />
+          </View>
         <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, borderWidth: 1, borderColor: '#F1F5F9', marginBottom: 16 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
             <ProfilePictureUploader
@@ -260,7 +264,6 @@ export default memo(function CustomerHome({ route, navigation }: any) {
 
           {editingProfile ? (
             <View style={{ gap: 12 }}>
-              <TextInput value={profileName} onChangeText={setProfileName} placeholder="Name" style={{ borderWidth: 1, borderColor: '#F1F5F9', borderRadius: 12, padding: 12, fontSize: 13 }} />
               <TextInput value={profilePhone} onChangeText={setProfilePhone} placeholder="Phone * (required to order)" keyboardType="phone-pad" style={{ borderWidth: 1, borderColor: profilePhone.trim() ? '#F1F5F9' : '#FECACA', borderRadius: 12, padding: 12, fontSize: 13 }} />
               {/* Address — same structured fields / validation / formatting as the
                   order form, rendered from the shared ADDRESS_FIELDS config. */}
@@ -290,7 +293,6 @@ export default memo(function CustomerHome({ route, navigation }: any) {
                   return;
                 }
                 const result = await updateProfile({
-                  name: profileName || undefined,
                   phone: profilePhone || undefined,
                   ...addressFieldsToProfile(addr),
                 });
@@ -308,7 +310,7 @@ export default memo(function CustomerHome({ route, navigation }: any) {
             <View style={{ gap: 12 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Ionicons name="person-outline" size={16} color="#64748B" />
-                <Text style={{ fontSize: 13, color: '#0F172A' }}>{profileName || 'No name set'}</Text>
+                <Text style={{ fontSize: 13, color: '#0F172A' }}>{user?.name || 'No name set'}</Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <Ionicons name="call-outline" size={16} color={profilePhone ? '#64748B' : '#EF4444'} />
@@ -325,6 +327,11 @@ export default memo(function CustomerHome({ route, navigation }: any) {
             </View>
           )}
         </View>
+
+        {/* Dedicated, validated display-name editor. Owns its own DB-first
+            update + cross-app sync (via setUser) so the name stays consistent
+            everywhere it is shown in the app. */}
+        <DisplayNameEditor user={user} onSaved={setUser} />
 
         {/* Payment Methods — relocated here from Checkout; sourced from the
             customer's private (RLS-scoped) payment_methods table. */}

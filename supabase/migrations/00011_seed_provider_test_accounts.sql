@@ -28,43 +28,43 @@ RETURNS void AS $$
 DECLARE
     v_user_id UUID;
 BEGIN
-    -- Insert into auth.users with email already confirmed (no email sent).
-    INSERT INTO auth.users (
-        instance_id, id, aud, role, email, encrypted_password,
-        email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
-        created_at, updated_at, confirmation_token, confirmation_sent_at,
-        recovery_token, recovery_sent_at, email_change_token_new,
-        email_change, email_change_sent_at, last_sign_in_at,
-        phone, phone_confirmed_at, phone_change, phone_change_token,
-        phone_change_sent_at, confirmed_at, banned_until,
-        reauthentication_token, reauthentication_sent_at, is_super_admin, is_sso_user
-    ) VALUES (
-        '00000000-0000-0000-0000-000000000000',
-        gen_random_uuid(),
-        'authenticated',
-        'authenticated',
-        p_email,
-        crypt(p_password, gen_salt('bf')),
-        NOW(),
-        '{"provider":"email","providers":["email"]}',
-        jsonb_build_object('name', p_name, 'role', 'technician', 'work_category', p_work_category),
-        NOW(), NOW(),
-        '', NOW(),
-        '', NOW(),
-        '', '',
-        NOW(), NOW(),
-        NULL, NULL,
-        '', '',
-        NOW(), NOW(),
-        NULL, '', NOW(),
-        false, false
-    )
-    ON CONFLICT (email) DO NOTHING
-    RETURNING id INTO v_user_id;
-
-    -- If the user already existed, look them up.
+    -- Idempotent: newer Supabase has NO single-column unique constraint on
+    -- auth.users.email (it uses a partial unique index on email WHERE
+    -- instance_id IS NULL), so ON CONFLICT (email) is invalid. Check existence
+    -- explicitly and only insert when the account does not yet exist.
+    SELECT u.id INTO v_user_id FROM auth.users u WHERE u.email = p_email LIMIT 1;
     IF v_user_id IS NULL THEN
-        SELECT id INTO v_user_id FROM auth.users WHERE email = p_email;
+        INSERT INTO auth.users (
+            instance_id, id, aud, role, email, encrypted_password,
+            email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+            created_at, updated_at, confirmation_token, confirmation_sent_at,
+            recovery_token, recovery_sent_at, email_change_token_new,
+            email_change, email_change_sent_at, last_sign_in_at,
+            phone, phone_confirmed_at,         phone_change, phone_change_token,
+            phone_change_sent_at, banned_until,
+            reauthentication_token, reauthentication_sent_at, is_super_admin, is_sso_user
+        ) VALUES (
+            '00000000-0000-0000-0000-000000000000',
+            gen_random_uuid(),
+            'authenticated',
+            'authenticated',
+            p_email,
+            crypt(p_password, gen_salt('bf')),
+            NOW(),
+            '{"provider":"email","providers":["email"]}',
+            jsonb_build_object('name', p_name, 'role', 'technician', 'work_category', p_work_category),
+            NOW(), NOW(),
+            '', NOW(),
+            '', NOW(),
+            '', '',
+            NOW(), NOW(),
+            NULL, NULL,
+            '', '',
+            NOW(),
+            NULL, '', NOW(),
+            false, false
+        )
+        RETURNING id INTO v_user_id;
     END IF;
 
     -- The handle_new_user() trigger likely already created the profile;

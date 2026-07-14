@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import type { Job, Technician } from '../types';
 import { logger } from './logger';
 import { logAndThrow, isForeignKeyViolation } from './errors';
+import { getDeviceTimeZone } from './autoCancel';
 
 /**
  * Database Service — Centralized Data Access Layer
@@ -323,6 +324,7 @@ export async function createOrderInProgress(
       technician_id: order.technicianId || null,
       technician_name: order.technicianName,
       technician_avatar: order.technicianAvatar,
+      local_tz: getDeviceTimeZone(),
     })
     .select('*')
     .single();
@@ -484,6 +486,7 @@ function mapDbOrderToAppJob(row: any): Job {
     technicianName: row.technician_name,
     technicianAvatar: row.technician_avatar,
     technicianId: row.technician_id,
+    localTz: row.local_tz ?? null,
   };
 }
 
@@ -748,5 +751,7 @@ function mapDbJobToAppJob(row: any): Job {
     technicianName: row.technician_name,
     technicianAvatar: row.technician_avatar,
     technicianId: row.technician_id,
+    cancelledReason: row.cancelled_reason,
+    cancelledAt: row.cancelled_at,
   };
 }

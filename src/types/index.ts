@@ -33,7 +33,7 @@ export interface Job {
   duration: number;
   focusAreas: string[];
   notes: string;
-  status: 'pending' | 'confirmed' | 'on_the_way' | 'arrived' | 'in_progress' | 'completed' | 'reported';
+  status: 'pending' | 'confirmed' | 'on_the_way' | 'arrived' | 'in_progress' | 'completed' | 'reported' | 'cancelled';
   baseRate: number;
   tax: number;
   travelFee: number;
@@ -52,6 +52,15 @@ export interface Job {
   technicianAvatar?: string;
   technicianId?: string;
   completedAt?: string;
+  /** Set when the order/job was auto-cancelled by the 30-min same-day SLA. */
+  cancelledReason?: string;
+  cancelledAt?: string;
+  /**
+   * IANA timezone captured from the device at booking time (e.g.
+   * 'Asia/Shanghai'). Used so the "same-day" auto-cancel check matches the
+   * clock the customer sees on their phone rather than UTC.
+   */
+  localTz?: string | null;
 }
 
 export interface Message {

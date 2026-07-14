@@ -21,6 +21,7 @@ import {
   profileToAddressFields,
   type AddressFields,
 } from '../../services/address';
+import { validateServiceTime } from '../../services/validation';
 
 export default function ScheduleDetails({ route, navigation }: any) {
   const { bookingData } = route.params || {};
@@ -56,6 +57,41 @@ export default function ScheduleDetails({ route, navigation }: any) {
       );
       return;
     }
+
+    // --- Service time validation: past-time block + late-afternoon warning ---
+    const timeCheck = validateServiceTime({
+      date,
+      timeSlotKey: timeSlot,
+      timeSlots,
+      now: new Date(),
+    });
+
+    // Rule: a slot whose window has already fully elapsed today is a hard block.
+    if (timeCheck.status === 'past') {
+      Alert.alert('Selected time unavailable', timeCheck.message ?? 'Please choose a valid time.');
+      return;
+    }
+
+    // Rule: very late same-day afternoon booking — confirm before proceeding.
+    if (timeCheck.status === 'late-warning') {
+      Alert.alert('Late Afternoon Booking', timeCheck.message ?? '', [
+        {
+          text: 'No',
+          style: 'cancel',
+          // Stay on the time-selection screen so the customer can reselect.
+        },
+        {
+          text: 'Yes',
+          onPress: () => proceedToCheckout(),
+        },
+      ], { cancelable: false });
+      return;
+    }
+
+    proceedToCheckout();
+  };
+
+  const proceedToCheckout = () => {
     const updated = {
       ...bookingData,
       date: date.toISOString().split('T')[0],

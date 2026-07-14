@@ -1,4 +1,4 @@
-import React, { useState, useEffect, createContext, useContext, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext, useCallback, useMemo } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -36,6 +36,28 @@ export const AppContext = createContext<{
   setJobs: React.Dispatch<React.SetStateAction<Job[]>>;
   refreshJobs: () => Promise<void>;
   updateJobStatus: (jobId: string, updates: Partial<Job>) => void;
+  /**
+   * Service timer bookkeeping. A start timestamp is kept per job id so the
+   * Active Service elapsed counter keeps counting in real time even when the
+   * technician navigates away and back — the component only re-derives
+   * `now - startedAt` instead of relying on a per-mount accumulator that dies
+   * on unmount. The timestamp lives in a ref (not React state) on purpose: it
+   * must have a stable identity so the ticking interval always reads the
+   * latest value without resubscribing.
+   */
+  startServiceTimer: (jobId: string) => void;
+  getServiceElapsed: (jobId: string) => number;
+  clearServiceTimer: (jobId: string) => void;
+  /**
+   * Checklist completion state per job. Kept in a ref (not React state) so a
+   * technician's ticked items survive navigating back from Active Service and
+   * returning later. Local component state alone is discarded the moment the
+   * screen unmounts — exactly the navigate-away-and-back cycle that was
+   * dropping the checkmarks. Mirrors the service-timer timestamp pattern:
+   * a stable ref identity that outlives any single screen mount.
+   */
+  getServiceChecklist: (jobId: string) => { text: string; completed: boolean }[] | undefined;
+  setServiceChecklist: (jobId: string, items: { text: string; completed: boolean }[]) => void;
   logout: () => void;
 }>({
   user: null,
@@ -44,6 +66,11 @@ export const AppContext = createContext<{
   setJobs: () => {},
   refreshJobs: async () => {},
   updateJobStatus: () => {},
+  startServiceTimer: () => {},
+  getServiceElapsed: () => 0,
+  clearServiceTimer: () => {},
+  getServiceChecklist: () => undefined,
+  setServiceChecklist: () => {},
   logout: () => {},
 });
 
@@ -99,6 +126,18 @@ export default function AppNavigator() {
   const [user, setUser] = useState<User | null>(null);
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [loading, setLoading] = useState(true);
+
+  // Absolute start timestamps (epoch ms) keyed by job id, driving the
+  // Active Service elapsed counter. Kept in a ref so the value survives
+  // navigation/remounts and the ticking interval can read it without
+  // resubscribing.
+  const serviceStartTimesRef = useRef<Record<string, number>>({});
+
+  // Checklist completion state per job, persisted across navigation. A ref (not
+  // React state) so the identity is stable and the value survives the
+  // unmount/remount cycle when a technician leaves Active Service and comes
+  // back — without forcing a re-render of every context consumer.
+  const serviceChecklistsRef = useRef<Record<string, { text: string; completed: boolean }[]>>({});
 
   useEffect(() => {
     AsyncStorage.getItem(storageKeys.user).then((val) => {
@@ -157,6 +196,44 @@ export default function AppNavigator() {
     persistJobStatus(jobId, updates).catch(() => {});
   }, []);
 
+  // --- Service elapsed-time tracking ---------------------------------------
+  // Start (idempotent): only record the timestamp the first time a job is
+  // started so re-entering Active Service never resets the running clock.
+  const startServiceTimer = useCallback((jobId: string) => {
+    if (jobId == null) return;
+    if (serviceStartTimesRef.current[jobId] == null) {
+      serviceStartTimesRef.current[jobId] = Date.now();
+    }
+  }, []);
+
+  // Elapsed seconds since the job started, or 0 if it was never started.
+  const getServiceElapsed = useCallback((jobId: string): number => {
+    const start = jobId != null ? serviceStartTimesRef.current[jobId] : undefined;
+    if (!start) return 0;
+    return Math.floor((Date.now() - start) / 1000);
+  }, []);
+
+  // Clear the running timer (e.g. once a job is completed) so a later re-open
+  // does not surface a stale, ever-growing counter.
+  const clearServiceTimer = useCallback((jobId: string) => {
+    if (jobId == null) return;
+    delete serviceStartTimesRef.current[jobId];
+  }, []);
+
+  // Checklist store accessors — read the persisted progress for a job (or
+  // undefined when we've never touched it) and write back the latest list.
+  const getServiceChecklist = useCallback((jobId: string) => {
+    return jobId != null ? serviceChecklistsRef.current[jobId] : undefined;
+  }, []);
+
+  const setServiceChecklist = useCallback(
+    (jobId: string, items: { text: string; completed: boolean }[]) => {
+      if (jobId == null) return;
+      serviceChecklistsRef.current[jobId] = items;
+    },
+    []
+  );
+
   const logout = useCallback(() => {
     setUser(null);
     AsyncStorage.removeItem(storageKeys.user);
@@ -169,8 +246,13 @@ export default function AppNavigator() {
     setJobs,
     refreshJobs,
     updateJobStatus,
+    startServiceTimer,
+    getServiceElapsed,
+    clearServiceTimer,
+    getServiceChecklist,
+    setServiceChecklist,
     logout,
-  }), [user, setUser, jobs, setJobs, refreshJobs, updateJobStatus, logout]);
+  }), [user, setUser, jobs, setJobs, refreshJobs, updateJobStatus, startServiceTimer, getServiceElapsed, clearServiceTimer, getServiceChecklist, setServiceChecklist, logout]);
 
   if (loading) {
     return (
@@ -206,6 +288,7 @@ export default function AppNavigator() {
               <Stack.Screen name="JobDetails" component={JobDetails} />
               <Stack.Screen name="ActiveService" component={ActiveService} />
               <Stack.Screen name="ServiceCompletion" component={ServiceCompletion} />
+              <Stack.Screen name="SupportChat" component={SupportChat} />
             </>
           )}
         </Stack.Navigator>
