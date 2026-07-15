@@ -46,6 +46,79 @@ WebGL hero sections and interactive product viewers (particle systems, parallax)
 
 ---
 
+## 🌐 How to Open — Website (Admin Dashboard)
+
+The `admin-dashboard/` folder is a React + Vite web app. There are two ways to open it: online (no install) or locally.
+
+### Option A — Open it online (shareable link, no setup)
+Anyone with the link can open and use the live dashboard immediately — it connects to the shared Supabase backend, so it's a real multi-user app, not a screenshot.
+
+| Link | Status | Notes |
+|---|---|---|
+| **https://369d7f5a05464fb58f912abf8a0176ca.app.codebuddy.work** | ✅ live now | CloudStudio sandbox preview — share today |
+| **https://cocokona.github.io/ServiceHub-App-clean/** | ⏳ enable once | Permanent GitHub Pages address (see below) |
+
+> **To activate the permanent GitHub Pages link:** go to the repo → **Settings → Pages → Build and deployment → Source**, switch from *GitHub Actions* to **Deploy from a branch**, choose branch **`gh-pages`** / folder **`/ (root)`**, then **Save**. It goes live in ~1 minute.
+
+### Option B — Run it locally
+```bash
+cd admin-dashboard
+cp .env.example .env          # then fill in your Supabase values (see below)
+npm install
+npm run dev                   # opens at http://localhost:5173
+```
+Build a production bundle: `npm run build` (outputs to `admin-dashboard/dist/`).
+
+---
+
+## 📱 How to Open — Mobile App (ServiceHub Pro)
+
+The mobile app is a React Native + Expo project at the repo root. The easiest way to try it is with **Expo Go** (no app-store install needed).
+
+### Prerequisites
+1. Install [Node.js](https://nodejs.org) (LTS).
+2. Install the **Expo Go** app on your phone:
+   - iOS: App Store → "Expo Go"
+   - Android: Play Store → "Expo Go"
+3. *(optional, for sharing a try-link)* install EAS CLI: `npm install -g eas-cli`
+
+### Run locally and scan the QR code
+```bash
+cp .env.example .env          # fill in your Supabase values (see below)
+npm install
+npm start                     # runs `expo start`
+```
+A QR code appears in the terminal — **scan it with the Expo Go app** on your phone and the app opens instantly.
+
+Other useful commands:
+```bash
+npm run web                   # run the app in your browser (Expo for Web)
+npm run android               # build/run on a connected Android device or emulator
+npm run ios                   # build/run on iOS simulator (macOS only)
+```
+
+### Share a try-link without building (Expo publish)
+Want others to try the app from a link/QR without cloning the repo? Publish it to Expo's cloud:
+```bash
+eas update --branch preview   # or: npx expo publish
+```
+Expo returns a shareable link + QR that anyone with Expo Go can open.
+
+---
+
+## 🔑 Environment Variables (both frontends)
+
+Both the website and the mobile app talk to the same Supabase project, so each needs a `.env` with two public, read-only values (the **anon** key is safe to ship to clients — it's protected by Row-Level Security; **never** put a `service_role` key in client env):
+
+| File | Variables |
+|---|---|
+| `.env` (repo root, mobile app) | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` |
+| `admin-dashboard/.env` (website) | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
+
+Copy the matching `.env.example` to `.env` and paste your project URL + anon key (from **Supabase → Project Settings → API**).
+
+---
+
 ## 📫 Contact
 
 - ✉️ Email: *coco135d@gmail.com*
