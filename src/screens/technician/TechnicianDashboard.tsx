@@ -19,9 +19,9 @@ import { updateProfile } from '../../services/auth.service';
 import ProfilePictureUploader from '../../components/ProfilePictureUploader';
 import DisplayNameEditor from '../../components/DisplayNameEditor';
 import SupportLauncher from '../../components/SupportLauncher';
-import { validateTechnicianAcceptProfile, validateTechnicianCanAcceptJob } from '../../services/validation';
-import { fetchAllOrdersInProgress, acceptOrderInProgress, fetchTechnicianAvailability, setTechnicianAvailability } from '../../services/database.service';
-import { scheduleSlots, technicianFilters, getStatusColor, technicianSharePercent } from '../../data';
+import { validateTechnicianAcceptProfile, validateTechnicianCanAcceptJob, validateRejectionReason } from '../../services/validation';
+import { fetchAllOrdersInProgress, acceptOrderInProgress, rejectOrderInProgress, fetchTechnicianAvailability, setTechnicianAvailability, seedTechnicianAvailability } from '../../services/database.service';
+import { scheduleSlots, technicianFilters, getStatusColor, technicianSharePercent, rejectionReasons } from '../../data';
 import { isJobCompleted, computeTechnicianEarnings } from '../../services/jobStatus';
 
 export default memo(function TechnicianDashboard({ route, navigation }: any) {
@@ -39,6 +39,10 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
   const [pendingOrders, setPendingOrders] = useState<Job[]>([]);
   const [loadingPending, setLoadingPending] = useState(false);
   const [acceptingId, setAcceptingId] = useState<string | null>(null);
+  // Rejection flow state
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectModalVisible, setRejectModalVisible] = useState(false);
+  const [rejectTargetId, setRejectTargetId] = useState<string | null>(null);
 
   // Schedule state — today + next 6 days
   const [weekDays, setWeekDays] = useState(() => {
@@ -73,6 +77,10 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
     if (!user?.id) return;
     setLoadingAvailability(true);
     try {
+      // Guarantee a complete, CLOSED-by-default grid for technicians who have
+      // no availability rows yet. Idempotent on the server (only seeds when
+      // empty), so calling it on every open is safe.
+      await seedTechnicianAvailability(user.id);
       const data = await fetchTechnicianAvailability(user.id);
       setAvailability(data);
     } catch (err) {
@@ -92,7 +100,7 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
   const toggleAvailability = async (slotLabel: string) => {
     if (!user?.id) return;
     const key = slotKeyMap[slotLabel] || slotLabel;
-    const currentVal = availability[`${selectedDayOfWeek}-${key}`] ?? true;
+    const currentVal = availability[`${selectedDayOfWeek}-${key}`] ?? false;
     const newVal = !currentVal;
 
     // Optimistic update
@@ -128,7 +136,7 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
       // specialty. A 'repair' tech sees repair jobs; a universal ('all') tech
       // sees every category. This keeps incompatible jobs (e.g. a repair tech
       // viewing a cleaning job) out of the browse list entirely.
-      const orders = await fetchAllOrdersInProgress(user?.workCategory);
+      const orders = await fetchAllOrdersInProgress(user?.workCategory, user?.id);
       setPendingOrders(orders);
     } catch (err) {
       console.error('Failed to fetch pending orders:', err);
@@ -196,6 +204,41 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
       Alert.alert('Error', 'Failed to accept order. Please try again.');
     } finally {
       setAcceptingId(null);
+    }
+  };
+
+  // Open the reason picker for an order the technician wants to decline.
+  const openRejectModal = (orderId: string) => {
+    setRejectTargetId(orderId);
+    setRejectModalVisible(true);
+  };
+
+  // Technician declines an order with a predefined reason. The order is removed
+  // from this technician's pending list (the server also excludes it on future
+  // fetches) and the reason is surfaced to the customer on their own order.
+  const handleRejectOrder = async (orderId: string, reason: string) => {
+    if (!user?.id) return;
+
+    const validation = validateRejectionReason(reason);
+    if (!validation.isValid) {
+      Alert.alert('Reason Required', validation.error || 'Please select a reason.');
+      return;
+    }
+
+    setRejectModalVisible(false);
+    setRejectingId(orderId);
+    try {
+      await rejectOrderInProgress(orderId, user.id, reason);
+      // Remove from the local pending list for immediate feedback.
+      setPendingOrders((prev) => prev.filter((o) => o.id !== orderId));
+      // Re-sync so a later pull-to-refresh reflects the server-side exclusion.
+      fetchPendingOrders();
+      Alert.alert('Declined', 'Order declined. The customer has been notified.');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to decline order. Please try again.');
+    } finally {
+      setRejectingId(null);
+      setRejectTargetId(null);
     }
   };
 
@@ -324,6 +367,7 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
   // Pending Orders Tab
   if (activeTab === 'pending') {
     return (
+      <>
       <SafeAreaView style={{ flex: 1, backgroundColor: '#FAFBFC' }}>
         <ScrollView
           contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
@@ -387,31 +431,57 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
                     )}
                   </View>
 
-                  {/* Price + Accept */}
+                  {/* Price + Actions */}
                   <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: '#F1F5F9', paddingTop: 12 }}>
                     <Text style={{ fontSize: 18, fontWeight: '800', color: '#FF4F8B' }}>${order.totalPrice.toFixed(2)}</Text>
-                    <TouchableOpacity
-                      onPress={() => handleAcceptOrder(order.id, order.serviceCategory)}
-                      disabled={acceptingId === order.id}
-                      style={{
-                        backgroundColor: acceptingId === order.id ? '#FFE2EC' : '#FF4F8B',
-                        paddingHorizontal: 20,
-                        paddingVertical: 10,
-                        borderRadius: 10,
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        gap: 6,
-                      }}
-                    >
-                      {acceptingId === order.id ? (
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#FF4F8B' }}>Accepting...</Text>
-                      ) : (
-                        <>
-                          <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
-                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>Accept</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity
+                        onPress={() => openRejectModal(order.id)}
+                        disabled={rejectingId === order.id || acceptingId === order.id}
+                        style={{
+                          paddingHorizontal: 16,
+                          paddingVertical: 10,
+                          borderRadius: 10,
+                          borderWidth: 1,
+                          borderColor: rejectingId === order.id ? '#F1F5F9' : '#FECACA',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          backgroundColor: '#fff',
+                        }}
+                      >
+                        {rejectingId === order.id ? (
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#FCA5A5' }}>Declining...</Text>
+                        ) : (
+                          <>
+                            <Ionicons name="close-circle-outline" size={16} color="#EF4444" />
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: '#EF4444' }}>Decline</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleAcceptOrder(order.id, order.serviceCategory)}
+                        disabled={acceptingId === order.id}
+                        style={{
+                          backgroundColor: acceptingId === order.id ? '#FFE2EC' : '#FF4F8B',
+                          paddingHorizontal: 20,
+                          paddingVertical: 10,
+                          borderRadius: 10,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                        }}
+                      >
+                        {acceptingId === order.id ? (
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: '#FF4F8B' }}>Accepting...</Text>
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark-circle" size={16} color="#FFFFFF" />
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: '#FFFFFF' }}>Accept</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -419,6 +489,81 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
           )}
         </ScrollView>
       </SafeAreaView>
+
+      {/* Rejection reason picker — slides up from the bottom */}
+      <Modal
+        visible={rejectModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setRejectModalVisible(false);
+          setRejectTargetId(null);
+        }}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(15,23,42,0.45)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: '#fff',
+              borderTopLeftRadius: 20,
+              borderTopRightRadius: 20,
+              padding: 20,
+              paddingBottom: 32,
+            }}
+          >
+            <Text style={{ fontSize: 18, fontWeight: '800', color: '#0F172A', marginBottom: 4 }}>
+              Why are you declining?
+            </Text>
+            <Text style={{ fontSize: 13, color: '#64748B', marginBottom: 12 }}>
+              This helps the customer understand. Your name stays private.
+            </Text>
+            {rejectionReasons.map((r) => (
+              <TouchableOpacity
+                key={r.id}
+                onPress={() => rejectTargetId && handleRejectOrder(rejectTargetId, r.id)}
+                style={{
+                  paddingVertical: 14,
+                  borderBottomWidth: 1,
+                  borderBottomColor: '#F1F5F9',
+                  flexDirection: 'row',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={{ fontSize: 15, fontWeight: '600', color: '#0F172A' }}>{r.label}</Text>
+                  {r.description ? (
+                    <Text style={{ fontSize: 12, color: '#64748B', marginTop: 2 }}>{r.description}</Text>
+                  ) : null}
+                </View>
+                <Ionicons name="chevron-forward" size={18} color="#CBD5E1" />
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              onPress={() => {
+                setRejectModalVisible(false);
+                setRejectTargetId(null);
+              }}
+              style={{
+                marginTop: 16,
+                paddingVertical: 14,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: '#F1F5F9',
+                alignItems: 'center',
+              }}
+            >
+              <Text style={{ fontSize: 14, fontWeight: '600', color: '#64748B' }}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      </>
     );
   }
 
@@ -457,7 +602,7 @@ export default memo(function TechnicianDashboard({ route, navigation }: any) {
           <Text style={{ fontSize: 14, fontWeight: '700', color: '#0F172A', marginBottom: 12 }}>Availability — {formatDayLabel(selectedDate)} {formatDayNum(selectedDate)}</Text>
           {scheduleSlots.map((slot) => {
             const key = slotKeyMap[slot] || slot;
-            const isOn = availability[`${selectedDayOfWeek}-${key}`] ?? true;
+            const isOn = availability[`${selectedDayOfWeek}-${key}`] ?? false;
             return (
               <View key={slot} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}>
                 <Text style={{ fontSize: 13, color: '#0F172A' }}>{slot}</Text>

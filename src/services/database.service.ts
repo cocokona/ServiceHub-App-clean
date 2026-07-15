@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import type { Job, Technician } from '../types';
 import { logger } from './logger';
-import { logAndThrow, isForeignKeyViolation } from './errors';
+import { logAndThrow, isForeignKeyViolation, isSchemaCacheMiss } from './errors';
 import { getDeviceTimeZone } from './autoCancel';
 
 /**
@@ -297,87 +297,88 @@ export async function createOrderInProgress(
     serviceCategory: string;
   }
 ): Promise<Job | null> {
-  const { data, error } = await supabase
+  // Build the insert payload. `local_tz` is captured-at-booking metadata used
+  // by the device-timezone-aware auto-cancel rule; it is the newest column and
+  // the one most likely to be missing from a stale PostgREST schema cache.
+  let payload: Record<string, unknown> = {
+    customer_id: order.customerId,
+    service_type: order.serviceType,
+    service_category: order.serviceCategory,
+    customer_name: order.customerName,
+    customer_phone: order.customerPhone,
+    customer_avatar: order.customerAvatar,
+    address: order.address,
+    apartment: order.apartment,
+    city: order.city,
+    zip_code: order.zipCode,
+    scheduled_date: order.date,
+    time_slot: order.timeSlot,
+    rooms: order.rooms,
+    duration: order.duration,
+    focus_areas: order.focusAreas || [],
+    notes: order.notes,
+    base_rate: order.baseRate || 0,
+    tax: order.tax || 0,
+    travel_fee: order.travelFee || 0,
+    add_ons_price: order.addOnsPrice || 0,
+    total_price: order.totalPrice || 0,
+    technician_id: order.technicianId || null,
+    technician_name: order.technicianName,
+    technician_avatar: order.technicianAvatar,
+    local_tz: getDeviceTimeZone(),
+  };
+
+  let res = await supabase
     .from('order_in_progress')
-    .insert({
-      customer_id: order.customerId,
-      service_type: order.serviceType,
-      service_category: order.serviceCategory,
-      customer_name: order.customerName,
-      customer_phone: order.customerPhone,
-      customer_avatar: order.customerAvatar,
-      address: order.address,
-      apartment: order.apartment,
-      city: order.city,
-      zip_code: order.zipCode,
-      scheduled_date: order.date,
-      time_slot: order.timeSlot,
-      rooms: order.rooms,
-      duration: order.duration,
-      focus_areas: order.focusAreas || [],
-      notes: order.notes,
-      base_rate: order.baseRate || 0,
-      tax: order.tax || 0,
-      travel_fee: order.travelFee || 0,
-      add_ons_price: order.addOnsPrice || 0,
-      total_price: order.totalPrice || 0,
-      technician_id: order.technicianId || null,
-      technician_name: order.technicianName,
-      technician_avatar: order.technicianAvatar,
-      local_tz: getDeviceTimeZone(),
-    })
+    .insert(payload)
     .select('*')
     .single();
 
-  if (error) {
-    if (isForeignKeyViolation(error)) {
-      // The customer profile is missing for this auth user. Recover by
-      // creating it, then retry the insert once. This turns the old
-      // show-stopping "sign out and sign in again" error into a transparent
-      // self-heal for accounts that predate the signup trigger.
+  // Stale PostgREST schema cache (PGRST204): the `local_tz` column exists in
+  // Postgres but PostgREST hasn't introspected it yet. Drop that optional
+  // column and retry once so Checkout never hard-fails on a cache that simply
+  // needs a `NOTIFY pgrst, 'reload schema';`. Omitting it only degrades the
+  // device-tz accuracy of the auto-cancel SLA — never the booking itself.
+  if (res.error && isSchemaCacheMiss(res.error)) {
+    const dropped = payload.local_tz;
+    payload = { ...payload };
+    delete payload.local_tz;
+    logger.warn(
+      '[db:createOrderInProgress] PostgREST schema cache missing `local_tz`; ' +
+        'retrying without it. Run `NOTIFY pgrst, \'reload schema\';` to clear.',
+      { droppedValue: dropped }
+    );
+    res = await supabase
+      .from('order_in_progress')
+      .insert(payload)
+      .select('*')
+      .single();
+  }
+
+  if (res.error) {
+    // The customer profile is missing for this auth user (SQLSTATE 23503).
+    // Recover by creating it, then retry the insert once. This turns the old
+    // show-stopping "sign out and sign in again" error into a transparent
+    // self-heal for accounts that predate the signup trigger.
+    if (isForeignKeyViolation(res.error)) {
       const recovered = await ensureProfile();
       if (recovered) {
-        const { data: retryData, error: retryError } = await supabase
+        const retry = await supabase
           .from('order_in_progress')
-          .insert({
-            customer_id: order.customerId,
-            service_type: order.serviceType,
-            service_category: order.serviceCategory,
-            customer_name: order.customerName,
-            customer_phone: order.customerPhone,
-            customer_avatar: order.customerAvatar,
-            address: order.address,
-            apartment: order.apartment,
-            city: order.city,
-            zip_code: order.zipCode,
-            scheduled_date: order.date,
-            time_slot: order.timeSlot,
-            rooms: order.rooms,
-            duration: order.duration,
-            focus_areas: order.focusAreas || [],
-            notes: order.notes,
-            base_rate: order.baseRate || 0,
-            tax: order.tax || 0,
-            travel_fee: order.travelFee || 0,
-            add_ons_price: order.addOnsPrice || 0,
-            total_price: order.totalPrice || 0,
-            technician_id: order.technicianId || null,
-            technician_name: order.technicianName,
-            technician_avatar: order.technicianAvatar,
-          })
+          .insert(payload)
           .select('*')
           .single();
 
-        if (!retryError && retryData) return mapDbOrderToAppJob(retryData);
+        if (!retry.error && retry.data) return mapDbOrderToAppJob(retry.data);
       }
       throw new Error(
         'Your profile was not found. Please sign out and sign in again.'
       );
     }
-    logAndThrow('createOrderInProgress', error);
+    logAndThrow('createOrderInProgress', res.error);
   }
 
-  return data ? mapDbOrderToAppJob(data) : null;
+  return res.data ? mapDbOrderToAppJob(res.data) : null;
 }
 
 /**
@@ -397,21 +398,125 @@ export async function fetchOrdersInProgress(customerId: string): Promise<Job[]> 
 /**
  * Fetch all pending orders in progress visible to technicians.
  * Optionally filter by service category.
+ *
+ * When `technicianId` is supplied, orders the technician has already rejected
+ * (recorded in `order_rejections`) are excluded so a decline removes the order
+ * from THAT technician's browse list — while it remains available to others.
  */
-export async function fetchAllOrdersInProgress(category?: string): Promise<Job[]> {
+export async function fetchAllOrdersInProgress(
+  category?: string,
+  technicianId?: string
+): Promise<Job[]> {
   let query = supabase
     .from('order_in_progress')
     .select('*')
+    .eq('status', 'pending')
     .order('created_at', { ascending: false });
 
   if (category && category !== 'all') {
     query = query.eq('service_category', category);
   }
 
+  // Exclude orders this technician has already declined. We resolve their
+  // rejected order ids first (they can read their own rows via RLS), then drop
+  // those ids from the browse query so the decline sticks in the UI.
+  if (technicianId) {
+    const { data: rejections, error: rejErr } = await supabase
+      .from('order_rejections')
+      .select('order_id')
+      .eq('technician_id', technicianId);
+    if (rejErr) logAndThrow('fetchAllOrdersInProgress', rejErr);
+
+    const rejectedIds = (rejections || []).map((r: any) => r.order_id);
+    if (rejectedIds.length > 0) {
+      query = query.not('id', 'in', `(${rejectedIds.join(',')})`);
+    }
+  }
+
   const { data, error } = await query;
 
   if (error) logAndThrow('fetchAllOrdersInProgress', error);
   return (data || []).map(mapDbOrderToAppJob);
+}
+
+/**
+ * Technician declines an order_in_progress with a predefined reason.
+ * Calls the DB function, which records the rejection (per technician) and
+ * surfaces the reason to the customer on their own order row. The order stays
+ * in the pool for other technicians. Returns void on success.
+ */
+export async function rejectOrderInProgress(
+  orderId: string,
+  technicianId: string,
+  reason: string
+): Promise<void> {
+  const { error } = await supabase.rpc('reject_order_in_progress', {
+    p_order_id: orderId,
+    p_technician_id: technicianId,
+    p_reason: reason,
+  });
+
+  if (error) logAndThrow('rejectOrderInProgress', error);
+}
+
+/**
+ * Customer-driven status change on an order_in_progress row. Used by the
+ * rejection dialog: 'pending' re-opens the order to the technician pool
+ * (request a different technician) and 'cancelled' cancels it for a refund.
+ * Authorization is enforced server-side by the set_order_in_progress_status
+ * RPC (only the order owner may call it). Returns void on success.
+ */
+export async function setOrderInProgressStatus(
+  orderId: string,
+  status: 'pending' | 'rejected' | 'cancelled'
+): Promise<void> {
+  const { error } = await supabase.rpc('set_order_in_progress_status', {
+    p_order_id: orderId,
+    p_status: status,
+  });
+
+  if (error) logAndThrow('setOrderInProgressStatus', error);
+}
+
+/**
+ * Seed a full grid of CLOSED availability slots for a technician who has none
+ * yet. Idempotent — safe to call on every Schedule open. Guarantees the
+ * "all slots start closed by default" invariant at the data level.
+ */
+export async function seedTechnicianAvailability(
+  technicianId: string
+): Promise<void> {
+  const { error } = await supabase.rpc('seed_technician_availability', {
+    p_technician_id: technicianId,
+  });
+
+  if (error) logAndThrow('seedTechnicianAvailability', error);
+}
+
+/**
+ * Fetch the most recent rejection reason recorded for a customer's pending
+ * order. Customers read this from their OWN order row (RLS: customer_id =
+ * auth.uid()); the technician identity is never returned. Returns null when
+ * the order has not been declined. Used by the tracking screen to surface a
+ * possibly-stale rejection reason even when the in-memory job snapshot lags.
+ */
+export async function fetchOrderRejectionReason(
+  orderId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('order_in_progress')
+    .select('last_rejection_reason')
+    .eq('id', orderId)
+    .maybeSingle();
+
+  if (error) {
+    logger.warn('[fetchOrderRejectionReason] lookup failed', {
+      code: (error as any)?.code,
+      message: error.message,
+    });
+    return null;
+  }
+  return data?.last_rejection_reason ?? null;
 }
 
 /**
@@ -475,7 +580,11 @@ function mapDbOrderToAppJob(row: any): Job {
     duration: row.duration || 2,
     focusAreas: row.focus_areas || [],
     notes: row.notes || '',
-    status: 'pending',
+    // The order_in_progress table carries its own status column (added in
+    // migration 00021). Previously this was hardcoded to 'pending', which is
+    // exactly why a rejected order never showed as REJECTED on the customer's
+    // orders page. Now we honor the real DB value.
+    status: row.status || 'pending',
     baseRate: Number(row.base_rate) || 0,
     tax: Number(row.tax) || 0,
     travelFee: Number(row.travel_fee) || 0,
@@ -487,6 +596,9 @@ function mapDbOrderToAppJob(row: any): Job {
     technicianAvatar: row.technician_avatar,
     technicianId: row.technician_id,
     localTz: row.local_tz ?? null,
+    rejectionReason: row.last_rejection_reason ?? null,
+    rejectedAt: row.rejected_at ?? null,
+    cancelledAt: row.cancelled_at ?? null,
   };
 }
 

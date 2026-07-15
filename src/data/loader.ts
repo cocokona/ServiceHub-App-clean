@@ -6,7 +6,11 @@
  * data. All data access in the app should go through this module.
  */
 
-import { Job, Message, Technician } from '../types';
+import { Job, Message, Technician, RejectionReason } from '../types';
+
+// Re-export the type so the data barrel (src/data/index.ts) can surface it
+// alongside the other data-layer types.
+export type { RejectionReason } from '../types';
 
 // ---------------------------------------------------------------------------
 // Raw JSON imports — Metro bundles these at build time
@@ -28,6 +32,7 @@ import supportResponsesData from './files/support-responses.json';
 import appConfigData from './files/app-config.json';
 import roleDescriptionsData from './files/role-descriptions.json';
 import activeServiceOptionsData from './files/active-service-options.json';
+import rejectionReasonsData from './files/rejection-reasons.json';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -528,6 +533,30 @@ export const activeServiceMenuOptions: string[] = safeArray<string>(
   activeServiceOptionsData.menuOptions,
   [],
 );
+
+// ---------------------------------------------------------------------------
+// Order rejection reasons
+// ---------------------------------------------------------------------------
+
+/**
+ * Predefined reasons a technician can pick when declining an order. The list
+ * is data-driven so new reasons can be added without code changes. The `id`
+ * is what gets persisted on the order; `label`/`description` are for display.
+ */
+export const rejectionReasons: RejectionReason[] = safeArray<RejectionReason>(
+  rejectionReasonsData.reasons,
+  [],
+);
+
+/**
+ * Resolve a stored rejection-reason id to its display label. Returns the raw
+ * id as a fallback when the id is unknown (e.g. a reason added after the app
+ * was built), and null when there is no reason at all.
+ */
+export function getRejectionReasonLabel(id?: string | null): string | null {
+  if (!id) return null;
+  return rejectionReasons.find((r) => r.id === id)?.label ?? id;
+}
 
 // ---------------------------------------------------------------------------
 // Diagnostics

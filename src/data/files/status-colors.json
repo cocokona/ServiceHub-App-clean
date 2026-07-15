@@ -6,6 +6,8 @@
     "arrived": "#06b6d4",
     "in_progress": "#10b981",
     "completed": "#22c55e",
+    "rejected": "#ef4444",
+    "cancelled": "#6b7280",
     "default": "#6b7280"
   },
   "technician": {
@@ -14,6 +16,8 @@
     "on_the_way": "#8b5cf6",
     "in_progress": "#10B981",
     "completed": "#10B981",
+    "rejected": "#ef4444",
+    "cancelled": "#6b7280",
     "default": "#6b7280"
   }
 }

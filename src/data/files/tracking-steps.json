@@ -11,11 +11,15 @@
     "arrived": { "title": "They're here!", "subtitle": "Technician is at your door" },
     "in_progress": { "title": "In Service", "subtitle": "The magic is happening" },
     "completed": { "title": "All Done!", "subtitle": "Service is complete" },
+    "rejected": { "title": "Order Declined", "subtitle": "A technician couldn't take this order" },
+    "cancelled": { "title": "Order Cancelled", "subtitle": "Your order has been cancelled" },
     "default": { "title": "Confirmed", "subtitle": "Waiting for technician assignment" }
   },
   "statusIndex": {
     "pending": 0,
     "confirmed": 0,
+    "rejected": 0,
+    "cancelled": 0,
     "on_the_way": 1,
     "arrived": 2,
     "in_progress": 3,

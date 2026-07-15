@@ -33,7 +33,7 @@ export interface Job {
   duration: number;
   focusAreas: string[];
   notes: string;
-  status: 'pending' | 'confirmed' | 'on_the_way' | 'arrived' | 'in_progress' | 'completed' | 'reported' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'on_the_way' | 'arrived' | 'in_progress' | 'completed' | 'reported' | 'rejected' | 'cancelled';
   baseRate: number;
   tax: number;
   travelFee: number;
@@ -52,6 +52,15 @@ export interface Job {
   technicianAvatar?: string;
   technicianId?: string;
   completedAt?: string;
+  /**
+   * Most recent decline reason recorded by a technician who rejected this
+   * order (e.g. 'too_far', 'no_free'). Surfaced to the customer on their own
+   * pending order so they understand why it was declined. Null/undefined when
+   * the order has not been rejected. The technician identity is never stored
+   * here — only the reason — so the customer cannot see who declined.
+   */
+  rejectionReason?: string | null;
+  rejectedAt?: string | null;
   /** Set when the order/job was auto-cancelled by the 30-min same-day SLA. */
   cancelledReason?: string;
   cancelledAt?: string;
@@ -104,6 +113,21 @@ export interface Review {
   rating: number;
   comment: string | null;
   createdAt: string;
+}
+
+/**
+ * A predefined reason a technician can pick when declining an order.
+ * The list is data-driven (see src/data/files/rejection-reasons.json) so new
+ * reasons can be added without code changes. `id` is what we persist on the
+ * order; `label`/`description` are shown in the picker and to the customer.
+ */
+export interface RejectionReason {
+  /** Stable key persisted on the order (e.g. 'too_far'). */
+  id: string;
+  /** Human-readable label shown in the picker and to the customer. */
+  label: string;
+  /** Optional helper text shown under the label in the picker. */
+  description?: string;
 }
 
 export interface User {

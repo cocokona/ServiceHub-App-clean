@@ -151,3 +151,13 @@ export {
   autoCancelUnacceptedOrders,
 } from './autoCancel.service';
 export type { AutoCancelOrderInput } from './autoCancel.service';
+
+// 持久化计时器（时间戳锚点：息屏 / 后台 / 进程被杀后重新打开均准确续算）
+export { PersistentTimer, formatDuration } from './timer.service';
+export type {
+  TimerMode,
+  TimerStatus,
+  TimerSnapshot,
+  ComputedTimer,
+  PersistentTimerOptions,
+} from './timer.service';

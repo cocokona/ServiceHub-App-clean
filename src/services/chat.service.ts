@@ -54,6 +54,32 @@ function formatTime(iso: string): string {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+/**
+ * Resolve the *authenticated* user id that Row Level Security evaluates
+ * against (`auth.uid()`), rather than trusting the app-level `user.id` which
+ * can be restored from stale `AsyncStorage` and diverge from the live
+ * session. RLS policies on `messages` / `support_threads` gate writes on
+ * `auth.uid()`, so sending `user.id` here is what caused
+ * "new row violates row-level security policy" when the two ids disagreed
+ * (the SELECT succeeded because it only checks participation, the INSERT
+ * additionally requires `sender_id = auth.uid()`).
+ *
+ * Falls back to `fallback` when no live session is reachable (e.g. unit
+ * tests), so callers keep working if the session can't be read.
+ */
+async function resolveAuthUserId(fallback: string): Promise<string> {
+  try {
+    const auth = (supabase as unknown as { auth?: { getUser?: () => Promise<{ data?: { user?: { id?: string } } }> } }).auth;
+    if (auth && typeof auth.getUser === 'function') {
+      const { data } = await auth.getUser();
+      if (data?.user?.id) return data.user.id;
+    }
+  } catch {
+    // Session can't be read right now — use the provided id as a fallback.
+  }
+  return fallback;
+}
+
 /** Map a DB row to the UI-facing `Message` type used by SupportChat. */
 function toUiMessage(r: DbMessageRow): Message {
   const role = r.sender_role;
@@ -74,10 +100,13 @@ function toUiMessage(r: DbMessageRow): Message {
  * person (resolved threads are ignored when re-opening).
  */
 export async function getOrCreateSupportThread(user: User): Promise<SupportThread> {
+  // Always gate the thread on the live session id (see resolveAuthUserId).
+  const authUserId = await resolveAuthUserId(user.id);
+
   const { data: existing, error: selErr } = await supabase
     .from('support_threads')
     .select('*')
-    .eq('user_id', user.id)
+    .eq('user_id', authUserId)
     .eq('status', 'open')
     .order('updated_at', { ascending: false })
     .limit(1)
@@ -94,7 +123,7 @@ export async function getOrCreateSupportThread(user: User): Promise<SupportThrea
   const { data: created, error: insErr } = await supabase
     .from('support_threads')
     .insert({
-      user_id: user.id,
+      user_id: authUserId,
       user_role: user.role,
       subject: null,
       status: 'open',
@@ -184,12 +213,16 @@ export async function sendMessage(
   sender: MessageSender,
   content: string
 ): Promise<Message> {
+  // RLS evaluates `sender_id = auth.uid()`, so use the live session id — not
+  // the potentially-stale AppContext `user.id` — to avoid an RLS violation.
+  const authUserId = await resolveAuthUserId(sender.senderId);
+
   const { data, error } = await supabase
     .from('messages')
     .insert({
       job_id: target.jobId ?? null,
       support_thread_id: target.threadId ?? null,
-      sender_id: sender.senderId,
+      sender_id: authUserId,
       sender_role: sender.senderRole,
       sender_name: sender.senderName,
       content,

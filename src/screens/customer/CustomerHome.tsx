@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useContext, useCallback, memo } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -52,6 +53,25 @@ const fieldStyle = {
   color: '#0F172A',
 } as const;
 
+// Rank recommended technicians so the most credible (highest-rated, with real
+// written reviews) surface first. Technicians that have neither a rating nor
+// any reviews always sink to the bottom — they must never lead the list.
+const sortRecommendedTechnicians = (a: Technician, b: Technician): number => {
+  const aRating = a.rating || 0;
+  const bRating = b.rating || 0;
+  const aReviews = a.reviewsCount || 0;
+  const bReviews = b.reviewsCount || 0;
+
+  // Technicians with no rating AND no reviews go last.
+  const aHasSignal = aRating > 0 || aReviews > 0 ? 1 : 0;
+  const bHasSignal = bRating > 0 || bReviews > 0 ? 1 : 0;
+  if (aHasSignal !== bHasSignal) return bHasSignal - aHasSignal;
+
+  // Higher rating wins; more reviews break ties between equal ratings.
+  if (bRating !== aRating) return bRating - aRating;
+  return bReviews - aReviews;
+};
+
 export default memo(function CustomerHome({ route, navigation }: any) {
   const { user, setUser, jobs, logout, refreshJobs } = useContext(AppContext);
   const activeTab = route?.params?.tab || 'home';
@@ -88,9 +108,10 @@ export default memo(function CustomerHome({ route, navigation }: any) {
   // the tracking screen is reflected here immediately after submission.
   const loadRecommended = useCallback(async () => {
     try {
-      const data = await fetchTechnicians();
-      setTechnicians(data);
-      const topTechs = data.slice(0, 2).filter((t) => t.id);
+    const data = await fetchTechnicians();
+    const sorted = [...data].sort(sortRecommendedTechnicians);
+    setTechnicians(sorted);
+    const topTechs = sorted.slice(0, 2).filter((t) => t.id);
       const tops = await Promise.all(
         topTechs.map((t) => fetchTopReview(t.id as string))
       );
@@ -115,6 +136,17 @@ export default memo(function CustomerHome({ route, navigation }: any) {
     await refreshJobs();
     setRefreshing(false);
   };
+
+  // Refresh the jobs list whenever this screen regains focus (e.g. when the
+  // customer navigates back from the order-tracking screen after acting on a
+  // rejection dialog). This guarantees a rejected/cancelled/re-opened order's
+  // status is reflected immediately on the "My Orders" page without a manual
+  // pull-to-refresh.
+  useFocusEffect(
+    useCallback(() => {
+      refreshJobs();
+    }, [refreshJobs]),
+  );
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -630,10 +662,15 @@ export default memo(function CustomerHome({ route, navigation }: any) {
                 <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text style={{ fontSize: 16, fontWeight: '800', color: '#FF4F8B' }}>${job.totalPrice.toFixed(2)}</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#FF4F8B' }}>Track</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '600', color: '#FF4F8B' }}>{job.status === 'rejected' ? 'Choose next step' : 'Track'}</Text>
                     <Ionicons name="arrow-forward" size={12} color="#FF4F8B" />
                   </View>
                 </View>
+                {job.status === 'rejected' && (
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: '#EF4444', marginTop: 8 }}>
+                    Action needed — tap to choose what's next
+                  </Text>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -750,7 +787,7 @@ export default memo(function CustomerHome({ route, navigation }: any) {
           even on small screens. */}
       <Text style={{ fontSize: 16, fontWeight: '700', color: '#0F172A', paddingHorizontal: 20, marginBottom: 12 }}>Recommended</Text>
       <View style={{ paddingHorizontal: 16, gap: 12 }}>
-        {(technicians.length > 0 ? technicians : recommendedTechnicians).slice(0, 2).map((tech, i) => {
+        {(technicians.length > 0 ? technicians : [...recommendedTechnicians].sort(sortRecommendedTechnicians)).slice(0, 2).map((tech, i) => {
           const top = tech.id ? techTopReviews[tech.id] : undefined;
           return (
           <View

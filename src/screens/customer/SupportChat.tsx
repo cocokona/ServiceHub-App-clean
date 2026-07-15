@@ -21,6 +21,21 @@ import {
 } from '../../services/chat.service';
 import { logger } from '../../services/logger';
 
+/** Safely render any thrown value as a readable string for logging. */
+function errText(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === 'object') {
+    const m = (e as { message?: unknown }).message;
+    if (typeof m === 'string') return m;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return String(e);
+    }
+  }
+  return String(e);
+}
+
 /**
  * Customer-service chat. Two entry points:
  *   - Job chat (`route.params.job`): tied to a specific job, opened from
@@ -101,11 +116,9 @@ export default function SupportChat({ route, navigation }: any) {
             },
           ]);
         }
-      } catch (e) {
-        logger.error('[SupportChat] load failed', {
-          error: e instanceof Error ? e.message : String(e),
-        });
-      } finally {
+    } catch (e) {
+      logger.error('[SupportChat] load failed', { error: errText(e) });
+    } finally {
         if (active) setLoading(false);
       }
     })();
@@ -143,9 +156,7 @@ export default function SupportChat({ route, navigation }: any) {
         prev.some((x) => x.id === sent.id) ? prev : [...prev, sent]
       );
     } catch (e) {
-      logger.error('[SupportChat] send failed', {
-        error: e instanceof Error ? e.message : String(e),
-      });
+      logger.error('[SupportChat] send failed', { error: errText(e) });
     }
   };
 

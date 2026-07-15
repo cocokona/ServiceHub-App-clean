@@ -29,6 +29,9 @@ export const JOB_STATUS = {
   COMPLETED: 'completed',
   /** Post-completion sub-state: the job was finished, then an issue was reported. */
   REPORTED: 'reported',
+  /** An order_in_progress that a technician declined. Customer chooses to
+   *  re-open it to the pool or cancel for a refund. */
+  REJECTED: 'rejected',
   CANCELLED: 'cancelled',
 } as const;
 
@@ -55,6 +58,34 @@ export function isJobCompleted(
 ): boolean {
   if (!status) return false;
   return (COMPLETED_STATUSES as readonly string[]).includes(status);
+}
+
+/**
+ * True when an order_in_progress has been declined by a technician. The order
+ * is out of the technician pool and the customer is prompted to re-request or
+ * cancel. Accepts a raw string so it is safe to call on DB values.
+ */
+export function isJobRejected(
+  status: Job['status'] | string | undefined | null
+): boolean {
+  return status === JOB_STATUS.REJECTED;
+}
+
+/**
+ * Order-level terminal states that remove the order from the technician browse
+ * pool (it is no longer awaiting acceptance). Mirrors the
+ * `order_in_progress.status` CHECK constraint.
+ */
+export const ORDER_TERMINAL_STATUSES: readonly Job['status'][] = [
+  'rejected',
+  'cancelled',
+];
+
+export function isOrderTerminal(
+  status: Job['status'] | string | undefined | null
+): boolean {
+  if (!status) return false;
+  return (ORDER_TERMINAL_STATUSES as readonly string[]).includes(status);
 }
 
 /**

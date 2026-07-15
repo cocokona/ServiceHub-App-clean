@@ -148,7 +148,16 @@ export async function getLastKnownLocation(
     .limit(1)
     .maybeSingle();
 
-  if (error) logAndThrow('getLastKnownLocation', error);
+  // A missing or unauthorized location ping is non-fatal: the tracking UI
+  // degrades gracefully (e.g. "location unavailable") instead of crashing the
+  // chat / map flow. Log the real cause so it stays diagnosable.
+  if (error) {
+    logger.warn('[location] getLastKnownLocation failed (non-fatal)', {
+      jobId,
+      error: error.message,
+    });
+    return null;
+  }
   return data ? mapRow(data) : null;
 }
 

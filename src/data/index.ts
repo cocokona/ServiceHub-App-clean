@@ -74,6 +74,9 @@ export {
   roleDescriptions,
   // Active service
   activeServiceMenuOptions,
+  // Order rejection reasons
+  rejectionReasons,
+  getRejectionReasonLabel,
   // Diagnostics
   getLoadWarnings,
   isDataHealthy,
@@ -92,4 +95,5 @@ export type {
   SupportPattern,
   Notification,
   CategoryFieldConfig,
+  RejectionReason,
 } from './loader';

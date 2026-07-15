@@ -42,7 +42,12 @@ function toDbError(error: unknown): DbErrorLike {
  */
 export function logAndThrow(operation: string, error: unknown): never {
   const dbErr = toDbError(error);
-  logger.error(`[db:${operation}] database operation failed`, {
+  // IMPORTANT: include the real `message` in BOTH the log line and the
+  // structured context. The previous version only logged code/details/hint,
+  // which dropped the actionable text and surfaced as "[object Object]" in
+  // the console. Consumers still catch a plain Error with the same message.
+  logger.error(`[db:${operation}] ${dbErr.message || 'database operation failed'}`, {
+    message: dbErr.message,
     code: dbErr.code,
     details: dbErr.details,
     hint: dbErr.hint,
@@ -67,4 +72,20 @@ export function isForeignKeyViolation(error: unknown): boolean {
  */
 export function isUniqueViolation(error: unknown): boolean {
   return toDbError(error).code === '23505';
+}
+
+/**
+ * True for PostgREST schema-cache misses (error code PGRST204:
+ * "Could not find the 'X' column of 'Y' in the schema cache").
+ *
+ * This happens when a column was added to the database (e.g. by a migration)
+ * but PostgREST's cached introspection hasn't been refreshed yet
+ * (`NOTIFY pgrst, 'reload schema';`). The column DOES exist in Postgres — the
+ * REST layer just doesn't know about it yet. The data layer uses this to
+ * retry an insert with the offending optional column omitted so a stale cache
+ * never blocks a user action. Run `NOTIFY pgrst, 'reload schema';` (or the
+ * remediation script) to clear it permanently.
+ */
+export function isSchemaCacheMiss(error: unknown): boolean {
+  return toDbError(error).code === 'PGRST204';
 }

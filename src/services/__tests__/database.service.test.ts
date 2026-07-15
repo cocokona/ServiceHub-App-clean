@@ -16,6 +16,11 @@ import {
   acceptOrderInProgress,
   fetchTechnicians,
   updateJobStatus,
+  fetchAllOrdersInProgress,
+  fetchOrdersInProgress,
+  rejectOrderInProgress,
+  seedTechnicianAvailability,
+  setOrderInProgressStatus,
 } from '../database.service';
 
 /** Builds a chainable, thenable Supabase query-builder mock that resolves to
@@ -37,6 +42,7 @@ function makeBuilder(result: { data: any; error: any }) {
     'single',
     'maybeSingle',
     'neq',
+    'not',
   ];
   methods.forEach((m) => {
     builder[m] = vi.fn(() => builder);
@@ -218,6 +224,179 @@ describe('database.service', () => {
     it('throws on error', async () => {
       supabase.from.mockReturnValue(makeBuilder({ data: null, error: { message: 'nope' } }));
       await expect(updateJobStatus('j1', { status: 'completed' })).rejects.toThrow('nope');
+    });
+  });
+
+  describe('fetchAllOrdersInProgress', () => {
+    it('excludes orders a technician has already rejected (technicianId passed)', async () => {
+      const rejBuilder = makeBuilder({ data: [{ order_id: 'o-rej' }], error: null });
+      const ordersBuilder = makeBuilder({
+        data: [
+          { id: 'o1', service_type: 'Cleaning', service_category: 'cleaning', total_price: '10' },
+          { id: 'o-rej', service_type: 'Repair', service_category: 'repair', total_price: '20' },
+        ],
+        error: null,
+      });
+
+      // First .from() call reads this technician's rejections; second reads orders.
+      supabase.from.mockImplementation((table: string) =>
+        table === 'order_rejections' ? rejBuilder : ordersBuilder
+      );
+
+      await fetchAllOrdersInProgress('all', 't1');
+
+      // The browse query must filter out the rejected order id.
+      expect(ordersBuilder.not).toHaveBeenCalledWith('id', 'in', '(o-rej)');
+    });
+
+    it('does not apply the exclusion filter when no technicianId is given', async () => {
+      const ordersBuilder = makeBuilder({ data: [], error: null });
+      supabase.from.mockReturnValue(ordersBuilder);
+
+      await fetchAllOrdersInProgress('cleaning');
+
+      expect(ordersBuilder.not).not.toHaveBeenCalled();
+      expect(ordersBuilder.eq).toHaveBeenCalledWith('service_category', 'cleaning');
+    });
+  });
+
+  describe('fetchOrdersInProgress', () => {
+    it('maps last_rejection_reason onto the Job.rejectionReason field', async () => {
+      supabase.from.mockReturnValue(
+        makeBuilder({
+          data: [
+            {
+              id: 'o1',
+              service_type: 'Cleaning',
+              service_category: 'cleaning',
+              total_price: '10',
+              last_rejection_reason: 'too_far',
+            },
+          ],
+          error: null,
+        }),
+      );
+
+      const orders = await fetchOrdersInProgress('c1');
+      expect(orders).toHaveLength(1);
+      expect(orders[0].rejectionReason).toBe('too_far');
+    });
+
+    it('leaves rejectionReason null when no decline has been recorded', async () => {
+      supabase.from.mockReturnValue(
+        makeBuilder({
+          data: [{ id: 'o1', service_type: 'Cleaning', service_category: 'cleaning', total_price: '10' }],
+          error: null,
+        }),
+      );
+
+      const orders = await fetchOrdersInProgress('c1');
+      expect(orders[0].rejectionReason).toBeNull();
+    });
+
+    it('maps the real DB status (e.g. rejected) instead of hardcoding pending', async () => {
+      supabase.from.mockReturnValue(
+        makeBuilder({
+          data: [
+            {
+              id: 'o1',
+              service_type: 'Cleaning',
+              service_category: 'cleaning',
+              total_price: '10',
+              status: 'rejected',
+              last_rejection_reason: 'too_far',
+              rejected_at: '2026-07-15T10:00:00Z',
+            },
+          ],
+          error: null,
+        }),
+      );
+
+      const orders = await fetchOrdersInProgress('c1');
+      // Regression guard: previously this was forced to 'pending', so a
+      // declined order never showed as REJECTED on the customer's orders page.
+      expect(orders[0].status).toBe('rejected');
+      expect(orders[0].rejectedAt).toBe('2026-07-15T10:00:00Z');
+    });
+  });
+
+  describe('fetchAllOrdersInProgress', () => {
+    it('only shows pending orders to technicians (excludes rejected/cancelled)', async () => {
+      const builder = makeBuilder({
+        data: [
+          { id: 'o1', service_type: 'Cleaning', service_category: 'cleaning', total_price: '10', status: 'pending' },
+        ],
+        error: null,
+      });
+      supabase.from.mockReturnValue(builder);
+
+      const orders = await fetchAllOrdersInProgress('cleaning');
+
+      // The browse pool must exclude non-pending orders so a rejected order
+      // leaves the technician pool (and only the rejecting technician is hidden
+      // via their own order_rejections row).
+      expect(builder.eq).toHaveBeenCalledWith('status', 'pending');
+      expect(orders[0].status).toBe('pending');
+    });
+  });
+
+  describe('rejectOrderInProgress', () => {
+    it('calls the reject_order_in_progress RPC with order/technician/reason', async () => {
+      supabase.rpc.mockReturnValue(makeBuilder({ data: null, error: null }));
+
+      await rejectOrderInProgress('o1', 't1', 'too_far');
+
+      expect(supabase.rpc).toHaveBeenCalledWith('reject_order_in_progress', {
+        p_order_id: 'o1',
+        p_technician_id: 't1',
+        p_reason: 'too_far',
+      });
+    });
+
+    it('throws on RPC error', async () => {
+      supabase.rpc.mockReturnValue(makeBuilder({ data: null, error: { message: 'rpc boom' } }));
+      await expect(rejectOrderInProgress('o1', 't1', 'no_free')).rejects.toThrow('rpc boom');
+    });
+  });
+
+  describe('seedTechnicianAvailability', () => {
+    it('calls the seed_technician_availability RPC for the technician', async () => {
+      supabase.rpc.mockReturnValue(makeBuilder({ data: null, error: null }));
+
+      await seedTechnicianAvailability('t1');
+
+      expect(supabase.rpc).toHaveBeenCalledWith('seed_technician_availability', {
+        p_technician_id: 't1',
+      });
+    });
+  });
+
+  describe('setOrderInProgressStatus', () => {
+    it('re-opens the order to the pool with status pending', async () => {
+      supabase.rpc.mockReturnValue(makeBuilder({ data: null, error: null }));
+
+      await setOrderInProgressStatus('o1', 'pending');
+
+      expect(supabase.rpc).toHaveBeenCalledWith('set_order_in_progress_status', {
+        p_order_id: 'o1',
+        p_status: 'pending',
+      });
+    });
+
+    it('cancels the order with status cancelled', async () => {
+      supabase.rpc.mockReturnValue(makeBuilder({ data: null, error: null }));
+
+      await setOrderInProgressStatus('o1', 'cancelled');
+
+      expect(supabase.rpc).toHaveBeenCalledWith('set_order_in_progress_status', {
+        p_order_id: 'o1',
+        p_status: 'cancelled',
+      });
+    });
+
+    it('throws on RPC error', async () => {
+      supabase.rpc.mockReturnValue(makeBuilder({ data: null, error: { message: 'not authorized' } }));
+      await expect(setOrderInProgressStatus('o1', 'cancelled')).rejects.toThrow('not authorized');
     });
   });
 });

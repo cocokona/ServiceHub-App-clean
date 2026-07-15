@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,13 @@ import {
   Image,
   Linking,
   Alert,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Job, Review } from '../../types';
-import { trackingSteps, getStatusInfo, getStatusIndex } from '../../data';
-import { fetchTechnicianPhone, fetchTechnicianById } from '../../services/database.service';
+import { trackingSteps, getStatusInfo, getStatusIndex, getRejectionReasonLabel } from '../../data';
+import { fetchTechnicianPhone, fetchTechnicianById, fetchOrderRejectionReason, setOrderInProgressStatus } from '../../services/database.service';
 import { submitReview, fetchReviewForJob } from '../../services/review.service';
 import { normalizePhoneForDial } from '../../services/validation';
 import RatingModal from '../../components/RatingModal';
@@ -25,6 +26,33 @@ import { PINK, PINK_SOFT, PINK_TINT, INK, MUTED, SUCCESS, ACCENT, BORDER_LIGHT }
 export default function Tracking({ route, navigation }: any) {
   const { job } = route.params || {};
   if (!job) return null;
+
+  // Rejection reason surfaced to the customer when a technician declines their
+  // still-pending order. Seeded from the job snapshot, then refreshed from the
+  // server so the notice appears even if the in-memory job is stale.
+  const [rejectionReason, setRejectionReason] = useState<string | null>(
+    job.rejectionReason ?? null
+  );
+
+  // The order's live status. We keep it in local state so a technician's
+  // rejection (status -> 'rejected') and the customer's subsequent choice
+  // (status -> 'pending' re-open, or 'cancelled') are reflected in this view
+  // immediately without waiting for a remount. Seeded from the route snapshot.
+  const [orderStatus, setOrderStatus] = useState<string>(job.status || 'pending');
+
+  // The customer-facing rejection dialog. Auto-opens when the order is already
+  // in the 'rejected' state on mount (e.g. the customer opens the order after a
+  // technician declined it). Can also be re-opened from the banner.
+  const [rejectionDialogVisible, setRejectionDialogVisible] = useState<boolean>(
+    job.status === 'rejected'
+  );
+  const [rejectionActionLoading, setRejectionActionLoading] = useState(false);
+
+  // Once the customer dismisses the rejection dialog with "Decide later" (or
+  // closes it via the back-drop), we don't re-pop it within the same screen
+  // session. Acting on either button changes the order status, which naturally
+  // takes the dialog out of scope, so this flag only guards the idle dismiss.
+  const rejectionNagDismissed = useRef(false);
 
   const [technicianPhone, setTechnicianPhone] = useState<string | null>(null);
   const [phoneLoading, setPhoneLoading] = useState(false);
@@ -81,6 +109,38 @@ export default function Tracking({ route, navigation }: any) {
     };
   }, [job.address, job.city, job.zipCode]);
 
+  // Keep the rejection notice fresh: if the order is still pending, re-read
+  // the latest decline reason from the server (the technician may have rejected
+  // it after this job snapshot was captured). No-op once the order is accepted
+  // or rejected.
+  useEffect(() => {
+    if (orderStatus !== 'pending') return;
+    let active = true;
+    fetchOrderRejectionReason(job.id)
+      .then((reason) => {
+        if (active) setRejectionReason(reason);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [job.id, orderStatus]);
+
+  // Auto-present the rejection dialog the moment a decline is detected — on
+  // mount (status already 'rejected', or a pending order carrying a reason from
+  // a refreshed snapshot) or right after the server lookup above populates the
+  // reason for a still-pending order. The customer should not have to first
+  // hunt for the banner link. A "Decide later" dismissal (tracked in
+  // rejectionNagDismissed) stops it from re-popping within the same session.
+  useEffect(() => {
+    if (rejectionNagDismissed.current) return;
+    const hasRejection =
+      orderStatus === 'rejected' || (orderStatus === 'pending' && !!rejectionReason);
+    if (hasRejection) {
+      setRejectionDialogVisible(true);
+    }
+  }, [orderStatus, rejectionReason]);
+
   // Subscribe to live technician location via Supabase Realtime.
   useEffect(() => {
     const unsub = subscribeToTechnicianLocation(job.id, (loc) => {
@@ -118,7 +178,7 @@ export default function Tracking({ route, navigation }: any) {
     }
     Promise.all([
       fetchTechnicianById(job.technicianId),
-      job.status === 'completed'
+      orderStatus === 'completed'
         ? fetchReviewForJob(job.id)
         : Promise.resolve(null),
     ])
@@ -127,7 +187,7 @@ export default function Tracking({ route, navigation }: any) {
         if (stats) setTechStats({ rating: stats.rating, reviewsCount: stats.reviewsCount });
         if (existing) {
           setExistingReview(existing);
-        } else if (job.status === 'completed') {
+        } else if (orderStatus === 'completed') {
           // Completed but not yet rated — pop the modal automatically.
           setRatingModalVisible(true);
         }
@@ -181,18 +241,60 @@ export default function Tracking({ route, navigation }: any) {
     openInMaps(techLoc.lat, techLoc.lng, { label: job.technicianName || 'Technician' });
   };
 
+  // --- Rejection dialog actions ---------------------------------------------
+  // The customer chose to re-open the order to the technician pool (request a
+  // different technician). We flip the order back to 'pending' server-side
+  // (which also clears the stale decline reason) and reflect it locally.
+  const handleRequestDifferentTechnician = async () => {
+    setRejectionActionLoading(true);
+    try {
+      await setOrderInProgressStatus(job.id, 'pending');
+      setOrderStatus('pending');
+      setRejectionReason(null);
+      setRejectionDialogVisible(false);
+      Alert.alert(
+        'Order re-opened',
+        "We'll match you with a different technician.",
+      );
+      navigation.goBack();
+    } catch (err: any) {
+      Alert.alert('Could not re-open order', err?.message || 'Please try again.');
+    } finally {
+      setRejectionActionLoading(false);
+    }
+  };
+
+  // The customer chose to cancel the order for a full refund.
+  const handleCancelOrder = async () => {
+    setRejectionActionLoading(true);
+    try {
+      await setOrderInProgressStatus(job.id, 'cancelled');
+      setOrderStatus('cancelled');
+      setRejectionDialogVisible(false);
+      Alert.alert(
+        'Order cancelled',
+        'Your order has been cancelled. A full refund will be issued to your original payment method.',
+      );
+      navigation.goBack();
+    } catch (err: any) {
+      Alert.alert('Could not cancel order', err?.message || 'Please try again.');
+    } finally {
+      setRejectionActionLoading(false);
+    }
+  };
+
   // Resolve the current journey step from the order status. When the order is
   // completed we push the index *past* the final step so the whole timeline
   // renders as finished (every node green) instead of leaving "In Service"
   // highlighted as the active step. This is defensive against any drift in the
   // `statusIndex` data mapping.
-  const rawStatusIndex = getStatusIndex(job.status);
+  const rawStatusIndex = getStatusIndex(orderStatus);
   const statusIndex =
-    job.status === 'completed'
+    orderStatus === 'completed'
       ? trackingSteps.length
       : Math.min(rawStatusIndex, Math.max(trackingSteps.length - 1, 0));
 
-  const statusInfo = getStatusInfo(job.status);
+  const statusInfo = getStatusInfo(orderStatus);
 
   // ETA is now derived live from technician pings via computeEta
   // (see the Realtime subscription effect below), not from job.status.
@@ -211,6 +313,49 @@ export default function Tracking({ route, navigation }: any) {
       </View>
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 24 }} showsVerticalScrollIndicator={false}>
+
+        {/* Rejection notice — shown to the customer when a technician has
+            declined their order (status 'rejected'), or for a still-pending
+            order that carries a fresh decline reason. When the order is
+            'rejected' we also surface a clear link to the action dialog. */}
+        {orderStatus === 'rejected' || (orderStatus === 'pending' && rejectionReason) ? (
+          <View
+            style={{
+              marginHorizontal: 20,
+              backgroundColor: '#FEF2F2',
+              borderRadius: 16,
+              padding: 14,
+              borderWidth: 1,
+              borderColor: '#FECACA',
+              marginBottom: 16,
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              gap: 10,
+            }}
+          >
+            <Ionicons name="information-circle" size={18} color="#EF4444" style={{ marginTop: 1 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#B91C1C' }}>
+                A technician was unable to take this order
+              </Text>
+              {rejectionReason ? (
+                <Text style={{ fontSize: 12, color: '#7F1D1D', marginTop: 2, lineHeight: 17 }}>
+                  Reason: {getRejectionReasonLabel(rejectionReason) || rejectionReason}
+                </Text>
+              ) : null}
+              {orderStatus === 'rejected' ? (
+                <TouchableOpacity
+                  onPress={() => setRejectionDialogVisible(true)}
+                  style={{ marginTop: 8, alignSelf: 'flex-start' }}
+                >
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#EF4444', textDecorationLine: 'underline' }}>
+                    Choose what to do →
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
 
         {/* Journey Progress — playful timeline */}
         <View
@@ -436,7 +581,7 @@ export default function Tracking({ route, navigation }: any) {
 
         {/* Rate / view rating — always-visible entry point to the rating modal.
             For completed, unrated orders the modal also pops automatically. */}
-        {job.status === 'completed' && job.technicianId && (
+        {orderStatus === 'completed' && job.technicianId && (
           <TouchableOpacity
             onPress={() => setRatingModalVisible(true)}
             style={{
@@ -523,6 +668,107 @@ export default function Tracking({ route, navigation }: any) {
           setSubmitError(null);
         }}
       />
+
+      {/* Rejection action dialog — shown when the order is 'rejected'. Offers
+          the customer two clear, easy-to-act-on choices. */}
+      <Modal
+        visible={rejectionDialogVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          rejectionNagDismissed.current = true;
+          setRejectionDialogVisible(false);
+        }}
+      >
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: 'rgba(15,23,42,0.45)',
+            justifyContent: 'flex-end',
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: '#fff',
+              borderTopLeftRadius: 24,
+              borderTopRightRadius: 24,
+              padding: 22,
+              paddingBottom: 34,
+            }}
+          >
+            <View style={{ alignItems: 'center', marginBottom: 16 }}>
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  backgroundColor: '#FEF2F2',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  marginBottom: 10,
+                }}
+              >
+                <Ionicons name="alert-circle" size={26} color="#EF4444" />
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '800', color: INK, textAlign: 'center' }}>
+                Your order was declined
+              </Text>
+              <Text style={{ fontSize: 13, color: MUTED, textAlign: 'center', marginTop: 6, lineHeight: 18 }}>
+                {rejectionReason
+                  ? `Reason: ${getRejectionReasonLabel(rejectionReason) || rejectionReason}\n`
+                  : ''}What would you like to do?
+              </Text>
+            </View>
+
+            <TouchableOpacity
+              onPress={handleRequestDifferentTechnician}
+              disabled={rejectionActionLoading}
+              style={{
+                backgroundColor: PINK,
+                paddingVertical: 15,
+                borderRadius: 14,
+                alignItems: 'center',
+                marginBottom: 10,
+                opacity: rejectionActionLoading ? 0.6 : 1,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Request a different technician"
+            >
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>
+                Request a different technician
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleCancelOrder}
+              disabled={rejectionActionLoading}
+              style={{
+                backgroundColor: '#F1F5F9',
+                paddingVertical: 15,
+                borderRadius: 14,
+                alignItems: 'center',
+                opacity: rejectionActionLoading ? 0.6 : 1,
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel order and get a full refund"
+            >
+              <Text style={{ color: '#0F172A', fontWeight: '700', fontSize: 15 }}>
+                Cancel order &amp; get full refund
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => {
+                rejectionNagDismissed.current = true;
+                setRejectionDialogVisible(false);
+              }}
+              style={{ alignItems: 'center', marginTop: 8 }}
+            >
+              <Text style={{ color: MUTED, fontSize: 13 }}>Decide later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

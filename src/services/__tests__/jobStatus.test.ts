@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   isJobCompleted,
+  isJobRejected,
+  isOrderTerminal,
   shouldRevealEarnings,
   computeTechnicianEarnings,
   COMPLETED_STATUSES,
@@ -114,5 +116,36 @@ describe('status vocabulary consistency', () => {
     expect(COMPLETED_STATUSES).toContain(JOB_STATUS.REPORTED);
     expect(COMPLETED_STATUSES).not.toContain(JOB_STATUS.CANCELLED);
     expect(COMPLETED_STATUSES).not.toContain(JOB_STATUS.IN_PROGRESS);
+  });
+});
+
+describe('isJobRejected', () => {
+  it('is true only for the rejected status', () => {
+    expect(isJobRejected('rejected')).toBe(true);
+  });
+
+  it.each(['pending', 'confirmed', 'cancelled', 'completed', 'in_progress'] as const)(
+    'is false for "%s"',
+    (status) => {
+      expect(isJobRejected(status)).toBe(false);
+    },
+  );
+
+  it('fails closed on missing/unknown status', () => {
+    expect(isJobRejected(undefined)).toBe(false);
+    expect(isJobRejected(null)).toBe(false);
+    expect(isJobRejected('nope' as Job['status'])).toBe(false);
+  });
+});
+
+describe('isOrderTerminal', () => {
+  it('is true for rejected and cancelled (order leaves the tech pool)', () => {
+    expect(isOrderTerminal('rejected')).toBe(true);
+    expect(isOrderTerminal('cancelled')).toBe(true);
+  });
+
+  it('is false for pending and active job statuses', () => {
+    expect(isOrderTerminal('pending')).toBe(false);
+    expect(isOrderTerminal('completed')).toBe(false);
   });
 });

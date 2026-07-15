@@ -166,9 +166,10 @@ describe('location.service', () => {
       expect(loc).toBeNull();
     });
 
-    it('re-throws the DB error via logAndThrow', async () => {
+    it('returns null on DB error instead of throwing (non-fatal)', async () => {
       hoist.supabase.from.mockReturnValue(makeBuilder({ data: null, error: { message: 'boom' } }));
-      await expect(getLastKnownLocation('job-x')).rejects.toThrow('boom');
+      const loc = await getLastKnownLocation('job-x');
+      expect(loc).toBeNull();
     });
   });
 
