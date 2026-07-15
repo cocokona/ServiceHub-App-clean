@@ -196,6 +196,35 @@ export function phoneUniquenessErrorMessage(_role: ProfileRole): string {
 }
 
 // ---------------------------------------------------------------------------
+// Order rejection reason validation
+// ---------------------------------------------------------------------------
+
+export interface RejectionValidation {
+  /** True only when a non-empty reason was supplied. */
+  isValid: boolean;
+  /** Friendly, user-safe message when `isValid` is false. */
+  error?: string;
+}
+
+/**
+ * Validate the reason a technician chose when declining an order.
+ *
+ * The reason vocabulary is data-driven (see `rejection-reasons.json`) and
+ * intentionally open-ended — new reasons can be added without code changes —
+ * so we only enforce that a reason was actually selected. The empty case is
+ * blocked up front so the UI never sends a blank decline to the server.
+ */
+export function validateRejectionReason(reason?: string | null): RejectionValidation {
+  if (!reason || !reason.trim()) {
+    return {
+      isValid: false,
+      error: 'Please select a reason for declining this order.',
+    };
+  }
+  return { isValid: true };
+}
+
+// ---------------------------------------------------------------------------
 // Display name (profile name) validation
 // ---------------------------------------------------------------------------
 

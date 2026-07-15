@@ -4,6 +4,7 @@ import {
   validateCustomerOrderProfile,
   validateTechnicianAcceptProfile,
   validateTechnicianCanAcceptJob,
+  validateRejectionReason,
   normalizePhoneForDial,
   normalizePhone,
   validatePhoneUniqueness,
@@ -164,6 +165,30 @@ describe('phoneUniquenessErrorMessage', () => {
 
   it('returns the same fixed message for a technician', () => {
     expect(phoneUniquenessErrorMessage('technician')).toBe(EXPECTED);
+  });
+});
+
+describe('validateRejectionReason', () => {
+  it('passes for a non-empty reason id', () => {
+    const result = validateRejectionReason('too_far');
+    expect(result.isValid).toBe(true);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('fails for an empty reason', () => {
+    const result = validateRejectionReason('');
+    expect(result.isValid).toBe(false);
+    expect(result.error).toBeTruthy();
+  });
+
+  it('fails for whitespace-only input', () => {
+    const result = validateRejectionReason('   ');
+    expect(result.isValid).toBe(false);
+  });
+
+  it('fails for null/undefined', () => {
+    expect(validateRejectionReason(null).isValid).toBe(false);
+    expect(validateRejectionReason(undefined).isValid).toBe(false);
   });
 });
 
