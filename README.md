@@ -48,10 +48,7 @@ WebGL hero sections and interactive product viewers (particle systems, parallax)
 
 ## 📫 Contact
 
-- 💼 LinkedIn: *[add your LinkedIn URL]*
-- 💻 GitHub: *[add your GitHub URL]*
-- ✉️ Email: *[add your email]*
-- 🌐 Portfolio: *[add your portfolio URL]*
+- ✉️ Email: *coco135d@gmail.com*
 
 ---
 
