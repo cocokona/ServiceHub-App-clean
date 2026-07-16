@@ -119,6 +119,32 @@ Copy the matching `.env.example` to `.env` and paste your project URL + anon key
 
 ---
 
+## 📸 Preview
+
+### Live website — Admin sign-in
+
+![ServiceHub Admin login](docs/screenshots/website-live-login.png)
+
+The deployed admin dashboard is restricted to company administrators, so the public-facing view is the sign-in screen above. Once authenticated, admins see the dashboard with orders, analytics, messages, and settings.
+
+### Admin dashboard UI mockups (included static template)
+
+The repository also includes a polished static admin dashboard template in `website/stitch_omniadmin_management_dashboard/` that demonstrates the intended visual language:
+
+| Analytics | Orders |
+|---|---|
+| ![Analytics](docs/screenshots/website-dashboard-analytics.png) | ![Orders](docs/screenshots/website-dashboard-orders.png) |
+| **Chat** | **Settings** |
+| ![Chat](docs/screenshots/website-dashboard-chat.png) | ![Settings](docs/screenshots/website-dashboard-settings.png) |
+
+> These four shots are from the included static template, not the live React admin dashboard. They are included to show the dashboard UI direction; the actual production admin console requires admin authentication.
+
+### Mobile app
+
+Screenshots of the React Native mobile app require running it via Expo (`npm run web` for a browser preview, or an iOS/Android simulator). If you want them added to the README, I can generate them from the running Expo build.
+
+---
+
 ## 📫 Contact
 
 - ✉️ Email: *coco135d@gmail.com*
@@ -133,4 +159,4 @@ This README and the contents of this repository (code, documentation, and assets
 
 ---
 
-<sub>Last updated: 2026-07-15</sub>
+<sub>Last updated: 2026-07-16</sub>
