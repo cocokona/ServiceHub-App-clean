@@ -131,11 +131,15 @@ The deployed admin dashboard is restricted to company administrators, so the pub
 
 The repository also includes a polished static admin dashboard template in `website/stitch_omniadmin_management_dashboard/` that demonstrates the intended visual language:
 
-| Analytics | Orders |
-|---|---|
-| <img src="docs/screenshots/website-dashboard-analytics.png" width="360" style="width:100%;height:auto;display:block" /> | <img src="docs/screenshots/website-dashboard-orders.png" width="360" style="width:100%;height:auto;display:block" /> |
-| **Chat** | **Settings** |
-| <img src="docs/screenshots/website-dashboard-chat.png" width="360" style="width:100%;height:auto;display:block" /> | <img src="docs/screenshots/website-dashboard-settings.png" width="360" style="width:100%;height:auto;display:block" /> |
+<p align="center">
+  <img src="docs/screenshots/website-dashboard-analytics.png" width="48%" alt="Analytics" />
+  <img src="docs/screenshots/website-dashboard-orders.png" width="48%" alt="Orders" />
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/website-dashboard-chat.png" width="48%" alt="Chat" />
+  <img src="docs/screenshots/website-dashboard-settings.png" width="48%" alt="Settings" />
+</p>
 
 > These four shots are from the included static template, not the live React admin dashboard. They are included to show the dashboard UI direction; the actual production admin console requires admin authentication.
 
@@ -143,10 +147,15 @@ The repository also includes a polished static admin dashboard template in `webs
 
 The React Native app opens on the **Sign In** screen. New users can switch to **Register** to create a customer or technician account. After signing in, customers land on the home tab and technicians land on their jobs dashboard.
 
-| Login | Customer Home | Technician Dashboard |
-|---|---|---|
-| <img src="docs/screenshots/app-login-ios.png" width="240" style="width:100%;height:auto;display:block" /> | <img src="docs/screenshots/app-customer-home-ios.png" width="240" style="width:100%;height:auto;display:block" /> | <img src="docs/screenshots/app-technician-jobs-ios.png" width="240" style="width:100%;height:auto;display:block" /> |
-| Sign in or create an account | Browse services, active bookings, and recommended technicians | Manage jobs, availability, and earnings |
+<p align="center">
+  <img src="docs/screenshots/app-login-ios.png" width="32%" alt="Sign in" />
+  <img src="docs/screenshots/app-customer-home-ios.png" width="32%" alt="Customer home" />
+  <img src="docs/screenshots/app-technician-jobs-ios.png" width="32%" alt="Technician dashboard" />
+</p>
+
+<p align="center">
+  <sub><b>Sign in</b> &nbsp;·&nbsp; <b>Customer Home</b> &nbsp;·&nbsp; <b>Technician Dashboard</b></sub>
+</p>
 
 Run it locally with:
 
