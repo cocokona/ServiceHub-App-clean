@@ -133,9 +133,9 @@ The repository also includes a polished static admin dashboard template in `webs
 
 | Analytics | Orders |
 |---|---|
-| ![Analytics](docs/screenshots/website-dashboard-analytics.png) | ![Orders](docs/screenshots/website-dashboard-orders.png) |
+| <img src="docs/screenshots/website-dashboard-analytics.png" width="360" style="width:100%;height:auto;display:block" /> | <img src="docs/screenshots/website-dashboard-orders.png" width="360" style="width:100%;height:auto;display:block" /> |
 | **Chat** | **Settings** |
-| ![Chat](docs/screenshots/website-dashboard-chat.png) | ![Settings](docs/screenshots/website-dashboard-settings.png) |
+| <img src="docs/screenshots/website-dashboard-chat.png" width="360" style="width:100%;height:auto;display:block" /> | <img src="docs/screenshots/website-dashboard-settings.png" width="360" style="width:100%;height:auto;display:block" /> |
 
 > These four shots are from the included static template, not the live React admin dashboard. They are included to show the dashboard UI direction; the actual production admin console requires admin authentication.
 
@@ -145,7 +145,7 @@ The React Native app opens on the **Sign In** screen. New users can switch to **
 
 | Login | Customer Home | Technician Dashboard |
 |---|---|---|
-| ![ServiceHub Pro mobile login](docs/screenshots/app-login-ios.png) | ![ServiceHub Pro customer home](docs/screenshots/app-customer-home-ios.png) | ![ServiceHub Pro technician jobs](docs/screenshots/app-technician-jobs-ios.png) |
+| <img src="docs/screenshots/app-login-ios.png" width="240" style="width:100%;height:auto;display:block" /> | <img src="docs/screenshots/app-customer-home-ios.png" width="240" style="width:100%;height:auto;display:block" /> | <img src="docs/screenshots/app-technician-jobs-ios.png" width="240" style="width:100%;height:auto;display:block" /> |
 | Sign in or create an account | Browse services, active bookings, and recommended technicians | Manage jobs, availability, and earnings |
 
 Run it locally with:
