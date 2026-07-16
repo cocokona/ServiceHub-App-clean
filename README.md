@@ -139,9 +139,18 @@ The repository also includes a polished static admin dashboard template in `webs
 
 > These four shots are from the included static template, not the live React admin dashboard. They are included to show the dashboard UI direction; the actual production admin console requires admin authentication.
 
-### Mobile app
+### Mobile app — iOS login screen
 
-Screenshots of the React Native mobile app require running it via Expo (`npm run web` for a browser preview, or an iOS/Android simulator). If you want them added to the README, I can generate them from the running Expo build.
+![ServiceHub Pro mobile login](docs/screenshots/app-login-ios.png)
+
+The React Native app opens on the **Sign In** screen. New users can switch to **Register** to create a customer or technician account. Run it locally with:
+
+```bash
+npm install
+npm run ios   # or npm run android / npm start for Expo Go
+```
+
+> Shot captured from the iOS Simulator running a release build of the app.
 
 ---
 
