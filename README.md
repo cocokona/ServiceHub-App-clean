@@ -48,17 +48,14 @@ WebGL hero sections and interactive product viewers (particle systems, parallax)
 
 ## 🌐 How to Open — Website (Admin Dashboard)
 
-The `admin-dashboard/` folder is a React + Vite web app. There are two ways to open it: online (no install) or locally.
 
 ### Option A — Open it online (shareable link, no setup)
-Anyone with the link can open and use the live dashboard immediately — it connects to the shared Supabase backend, so it's a real multi-user app, not a screenshot.
 
 | Link | Status | Notes |
 |---|---|---|
 | **https://369d7f5a05464fb58f912abf8a0176ca.app.codebuddy.work** | ✅ live now | CloudStudio sandbox preview — share today |
 | **https://cocokona.github.io/ServiceHub-App-clean/** | ⏳ enable once | Permanent GitHub Pages address (see below) |
 
-> **To activate the permanent GitHub Pages link:** go to the repo → **Settings → Pages → Build and deployment → Source**, switch from *GitHub Actions* to **Deploy from a branch**, choose branch **`gh-pages`** / folder **`/ (root)`**, then **Save**. It goes live in ~1 minute.
 
 ### Option B — Run it locally
 ```bash
